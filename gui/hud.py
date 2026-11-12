@@ -94,13 +94,21 @@ class HudCanvas(QWidget):
             (time.strftime("%H:%M:%S"), "LINK", "BACKEND ONLINE"),
         ]
 
-        # Live location and clickable interactive real map
+        # Live location and interactive real tactical map (no redirect)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._map_rect = QRectF()
         self._exit_btn_rect = QRectF()
         self._hover_exit = False
         self.on_exit_hud = None
+        self._map_zoom = 1.0
+        self._map_pan_x = 0.0
+        self._map_pan_y = 0.0
+        self._map_dragging = False
+        self._map_drag_start = QPointF()
+        self._btn_zoom_in = QRectF()
+        self._btn_zoom_out = QRectF()
+        self._btn_recenter = QRectF()
         self._map_pixmap: QPixmap | None = None
         try:
             from pathlib import Path
@@ -248,22 +256,45 @@ class HudCanvas(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             pos = event.position()
+            # 1. Back / Exit HUD button
             if hasattr(self, "_exit_btn_rect") and self._exit_btn_rect.contains(pos):
                 if hasattr(self, "on_exit_hud") and callable(self.on_exit_hud):
                     self.on_exit_hud()
                 return
-            if hasattr(self, "_map_rect") and self._map_rect.contains(pos):
-                try:
-                    from core.location import open_live_map
-                    open_live_map()
-                    self.append_hud_log("MAP: Satellite navigation coordinates opened.")
-                except Exception as e:
-                    print(f"[HUD] map click: {e}")
+
+            # 2. Interactive Map Widget Controls (NO browser redirect!)
+            if hasattr(self, "_btn_zoom_in") and self._btn_zoom_in.contains(pos):
+                self._map_zoom = min(2.5, self._map_zoom + 0.3)
+                self.update()
                 return
+            if hasattr(self, "_btn_zoom_out") and self._btn_zoom_out.contains(pos):
+                self._map_zoom = max(0.5, self._map_zoom - 0.3)
+                self.update()
+                return
+            if hasattr(self, "_btn_recenter") and self._btn_recenter.contains(pos):
+                self._map_pan_x = 0.0
+                self._map_pan_y = 0.0
+                self._map_zoom = 1.0
+                self.update()
+                return
+
+            if hasattr(self, "_map_rect") and self._map_rect.contains(pos):
+                self._map_dragging = True
+                self._map_drag_start = QPointF(pos)
+                return
+
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         pos = event.position()
+        if getattr(self, "_map_dragging", False):
+            delta = pos - self._map_drag_start
+            self._map_pan_x += delta.x() * 0.8
+            self._map_pan_y += delta.y() * 0.8
+            self._map_drag_start = QPointF(pos)
+            self.update()
+            return
+
         hover_exit = hasattr(self, "_exit_btn_rect") and self._exit_btn_rect.contains(pos)
         hover_map = hasattr(self, "_map_rect") and self._map_rect.contains(pos)
         if getattr(self, "_hover_exit", False) != hover_exit:
@@ -274,6 +305,22 @@ class HudCanvas(QWidget):
         else:
             self.unsetCursor()
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._map_dragging = False
+        super().mouseReleaseEvent(event)
+
+    def wheelEvent(self, event):
+        if hasattr(self, "_map_rect") and self._map_rect.contains(event.position()):
+            angle = event.angleDelta().y()
+            if angle > 0:
+                self._map_zoom = min(2.5, self._map_zoom + 0.15)
+            elif angle < 0:
+                self._map_zoom = max(0.5, self._map_zoom - 0.15)
+            self.update()
+            return
+        super().wheelEvent(event)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Escape, Qt.Key.Key_F10):
@@ -704,6 +751,12 @@ class HudCanvas(QWidget):
         my = H - mh - 30.0
         self._map_rect = QRectF(mx, my, mw, mh)
 
+        # On-screen tactile zoom & recenter buttons
+        btn_sz = 15.0
+        self._btn_zoom_in = QRectF(mx + mw - btn_sz - 4, my + 4, btn_sz, btn_sz)
+        self._btn_zoom_out = QRectF(mx + mw - btn_sz - 4, my + 4 + btn_sz + 3, btn_sz, btn_sz)
+        self._btn_recenter = QRectF(mx + mw - btn_sz - 4, my + 4 + (btn_sz + 3) * 2, btn_sz, btn_sz)
+
         p.save()
         p.setPen(QPen(blend(C.BORDER_B, 0.90), 1.2))
         p.setBrush(QBrush(QColor(18, 10, 2, 230)))
@@ -711,15 +764,26 @@ class HudCanvas(QWidget):
 
         p.setClipRect(QRectF(mx + 1, my + 1, mw - 2, mh - 2))
 
-        # Render the actual real tactical street map
+        # Render the actual real tactical street map with zoom and pan
         if self._map_pixmap is not None and not self._map_pixmap.isNull():
+            pw = float(self._map_pixmap.width())
+            ph = float(self._map_pixmap.height())
+            zoom = max(0.5, min(3.0, getattr(self, "_map_zoom", 1.0)))
+            sw = max(20.0, pw / zoom)
+            sh = max(20.0, ph / zoom)
+            pan_x = getattr(self, "_map_pan_x", 0.0)
+            pan_y = getattr(self, "_map_pan_y", 0.0)
+            center_x = pw / 2.0 - (pan_x * (pw / mw))
+            center_y = ph / 2.0 - (pan_y * (ph / mh))
+            sx = max(0.0, min(pw - sw, center_x - sw / 2.0))
+            sy = max(0.0, min(ph - sh, center_y - sh / 2.0))
             p.drawPixmap(
                 QRectF(mx + 1, my + 1, mw - 2, mh - 2),
                 self._map_pixmap,
-                QRectF(0, 0, self._map_pixmap.width(), self._map_pixmap.height())
+                QRectF(sx, sy, sw, sh)
             )
             # Subtle amber overlay tint to match holographic HUD
-            p.fillRect(QRectF(mx + 1, my + 1, mw - 2, mh - 2), QColor(255, 157, 0, 25))
+            p.fillRect(QRectF(mx + 1, my + 1, mw - 2, mh - 2), QColor(255, 157, 0, 22))
         else:
             p.setPen(QPen(blend(C.PRI_DIM, 0.35), 1.0))
             for gx in range(int(mx) + 14, int(mx + mw), 22):
@@ -739,16 +803,42 @@ class HudCanvas(QWidget):
         p.setBrush(QBrush(with_alpha(C.ACC, 0.60 * pulse)))
         p.drawEllipse(QPointF(blip_x, blip_y), 3.0, 3.0)
 
-        # Top coordinate badge
-        coords_txt = self._loc_info.get("coords_str", "15.5016° N, 73.8234° E")
-        p.setFont(px_font(7, QFont.Weight.Medium, mono=True))
-        p.setPen(QPen(blend(C.PRI, 0.95)))
-        p.drawText(QRectF(mx + 6, my + 4, mw - 12, 12), Qt.AlignmentFlag.AlignLeft, coords_txt)
+        # Dynamic GPS coordinate badge based on pan
+        pan_x = getattr(self, "_map_pan_x", 0.0)
+        pan_y = getattr(self, "_map_pan_y", 0.0)
+        zoom = getattr(self, "_map_zoom", 1.0)
+        cur_lat = 15.5016 - (pan_y / zoom) * 0.00035
+        cur_lon = 73.8234 + (pan_x / zoom) * 0.00035
+        coords_txt = f"{cur_lat:.4f} N, {cur_lon:.4f} E"
 
-        # Bottom click prompt
-        p.setFont(px_font(6, QFont.Weight.Bold, mono=True, spacing=1.0))
+        p.setFont(px_font(8, QFont.Weight.Medium, mono=True))
+        p.setPen(QPen(blend(C.PRI, 0.95)))
+        p.drawText(QRectF(mx + 6, my + 4, mw - 30, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, coords_txt)
+
+        # Draw map control tactile buttons (+, -, O) with crisp vector graphics
+        for btn_rect, sym in [
+            (self._btn_zoom_in, "+"),
+            (self._btn_zoom_out, "-"),
+            (self._btn_recenter, "O"),
+        ]:
+            p.setPen(QPen(blend(C.PRI, 0.70), 1.0))
+            p.setBrush(QBrush(QColor(15, 10, 3, 210)))
+            p.drawRoundedRect(btn_rect, 2, 2)
+            p.setPen(QPen(blend(C.PRI, 0.95), 1.3))
+            bcx, bcy = btn_rect.center().x(), btn_rect.center().y()
+            if sym == "+":
+                p.drawLine(QLineF(bcx - 3.5, bcy, bcx + 3.5, bcy))
+                p.drawLine(QLineF(bcx, bcy - 3.5, bcx, bcy + 3.5))
+            elif sym == "-":
+                p.drawLine(QLineF(bcx - 3.5, bcy, bcx + 3.5, bcy))
+            else:
+                p.drawEllipse(QPointF(bcx, bcy), 2.8, 2.8)
+
+        # Bottom info prompt
+        p.setFont(px_font(7, QFont.Weight.Bold, mono=True, spacing=1.0))
         p.setPen(QPen(blend(C.TEXT_DIM, 0.85)))
-        p.drawText(QRectF(mx + 6, my + mh - 14, mw - 12, 12), Qt.AlignmentFlag.AlignRight, "LIVE GPS LOCK")
+        mode_hint = "DRAG / WHEEL" if getattr(self, "_map_dragging", False) else f"GPS [{zoom:.1f}x]"
+        p.drawText(QRectF(mx + 6, my + mh - 14, mw - 12, 12), Qt.AlignmentFlag.AlignRight, mode_hint)
         p.restore()
 
         # Real location label beneath map box

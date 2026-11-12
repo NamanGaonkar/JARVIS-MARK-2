@@ -1863,28 +1863,7 @@ class JarvisLive:
             # the echo of what we are playing right now", sustained long enough
             # that a cough or a keystroke cannot trigger it.
             if jarvis_speaking:
-                # Barge-in: detect when user speaks over JARVIS and immediately interrupt
-                try:
-                    level = _pcm_level(indata)
-                    if level > 0.035:
-                        is_voice = False
-                        try:
-                            is_voice = self._echo.is_user_speech(indata, SEND_SAMPLE_RATE, level)
-                        except Exception:
-                            is_voice = (level > 0.08)
-                        if is_voice or level > 0.10:
-                            self._barge_in_count = getattr(self, "_barge_in_count", 0) + 1
-                            if self._barge_in_count >= 2:
-                                self._barge_in_count = 0
-                                print("[JARVIS] 🎤 Voice interruption detected — interrupting speech")
-                                loop.call_soon_threadsafe(self.interrupt)
-                                return
-                        else:
-                            self._barge_in_count = 0
-                    else:
-                        self._barge_in_count = 0
-                except Exception:
-                    pass
+                # Manual interrupt only (Escape key or stop button) — audio barge-in disabled
                 return
 
             # ── Echo tail ────────────────────────────────────────────────────

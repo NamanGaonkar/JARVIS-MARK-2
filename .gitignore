@@ -48,4 +48,5 @@ desktop.ini
 *.log
 logs/
 downloads/
+*.zip
 screenshots/
