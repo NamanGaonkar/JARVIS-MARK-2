@@ -45,7 +45,10 @@ def routines(parameters: dict, player=None) -> str:
         if action == "list":
             rows = [_row(eng, r) for r in eng.list()]
             quiet = eng.quiet_hours()
-            return "\n".join(rows + [f"quiet hours: {quiet or 'off'}"]) if rows else "No routines."
+            res = "\n".join(rows + [f"quiet hours: {quiet or 'off'}"]) if rows else "No routines."
+            if player:
+                player.show_content("SCHEDULED TIMETABLE & TASKS", res)
+            return res
 
         if action == "add":
             kind = str(a.get("kind") or "").strip().lower()
@@ -61,6 +64,10 @@ def routines(parameters: dict, player=None) -> str:
                         trigger=trigger, deliver=a.get("deliver") or "voice",
                         agent=a.get("agent") or "general", minutes=a.get("minutes") or 10,
                         quiet=a.get("quiet"))
+            if player:
+                player.write_log(f"[Routines] ✅ Scheduled: {r['name']}")
+                all_rows = [_row(eng, item) for item in eng.list()]
+                player.show_content("SCHEDULED TIMETABLE", "\n".join(all_rows))
             return outcome.done("routines", id=r["id"], name=r["name"], when=eng.describe(r),
                                 next=datetime.fromtimestamp(r["next_ts"]).strftime("%Y-%m-%d %H:%M")
                                 if r.get("next_ts") else None)

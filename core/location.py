@@ -97,10 +97,12 @@ def get_location(refresh: bool = False) -> dict:
         return loc
 
 
-def open_live_map() -> None:
-    """Open interactive map centered at detected coordinates in user's browser."""
+def open_live_map(lat: float | None = None, lon: float | None = None) -> None:
+    """Open interactive map centered at detected or panned coordinates in user's browser."""
     loc = get_location()
-    url = loc.get("map_url") or f"https://www.google.com/maps/@{loc['lat']},{loc['lon']},14z"
+    cur_lat = lat if lat is not None else loc.get("lat", 15.5016)
+    cur_lon = lon if lon is not None else loc.get("lon", 73.8234)
+    url = f"https://www.google.com/maps/@{cur_lat:.5f},{cur_lon:.5f},15z"
     try:
         webbrowser.open(url)
     except Exception as e:

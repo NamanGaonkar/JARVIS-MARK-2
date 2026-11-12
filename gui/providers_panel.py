@@ -161,7 +161,7 @@ class ProvidersOverlay(_HudOverlay):
         outer.addWidget(title)
 
         sub = QLabel("Choose what powers the conversation. "
-                     "Gemini is the default and needs nothing set up here.")
+                     "Select universal cloud APIs or your own local pipeline.")
         sub.setWordWrap(True)
         sub.setFont(hud_font(8))
         sub.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
@@ -174,15 +174,14 @@ class ProvidersOverlay(_HudOverlay):
         self._mode = get_provider_mode()
         cards = QHBoxLayout(); cards.setSpacing(10)
         self._card_gemini = self._mode_card(
-            "GEMINI LIVE",
-            "One connection carries your voice, its voice, the transcript and "
-            "the tools together. The fastest option — about half a second to "
-            "the first word.",
+            "DIRECT LIVE API",
+            "Direct streaming connection carrying speech, transcript and "
+            "tools together over a unified real-time protocol.",
             "gemini")
         self._card_local = self._mode_card(
-            "LOCAL PIPELINE SETUP",
-            "Your choice of hearing, thinking and speaking. Can run entirely on "
-            "this computer, with nothing leaving it. Slower: 1.5 to 4 seconds.",
+            "CUSTOM / LOCAL PIPELINE",
+            "Modular hearing, thinking and speaking models. Connect local "
+            "Ollama, LM Studio, or external APIs (OpenAI, Claude, DeepSeek).",
             "pipeline")
         cards.addWidget(self._card_gemini)
         cards.addWidget(self._card_local)
@@ -259,11 +258,13 @@ class ProvidersOverlay(_HudOverlay):
 
     # ── pieces ───────────────────────────────────────────────────────────────
     def _mode_card(self, title: str, body: str, value: str) -> QPushButton:
+        import textwrap
         b = QPushButton()
         b.setCheckable(True)
-        b.setMinimumHeight(84)
+        b.setMinimumHeight(96)
         b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.setText(f"{title}\n\n{body}")
+        wrapped_body = textwrap.fill(body, width=42)
+        b.setText(f"{title}\n\n{wrapped_body}")
         b.setFont(hud_font(7))
         b.clicked.connect(lambda _=0, v=value: self._set_mode(v))
         b.setProperty("modeValue", value)
@@ -606,12 +607,11 @@ class ProvidersOverlay(_HudOverlay):
         else:
             w, lay = self._box([])
             lay.addWidget(self._label(
-                "Nothing to set up. Your voice goes to Gemini and comes back as "
-                "speech over one connection, with the transcript and every tool "
-                "call on the same wire.", 8, C.TEXT_DIM))
+                "Direct streaming engine active. Real-time audio, transcription, and "
+                "tool execution over a single unified connection.", 8, C.TEXT_DIM))
             lay.addWidget(self._label(
-                "Pick MY OWN SETUP above to run it on your own machine, or "
-                "through another company's model.", 7, C.TEXT_DIM))
+                "Select CUSTOM / LOCAL PIPELINE above to configure local models (Ollama, LM Studio) "
+                "or independent providers (OpenAI, Claude, DeepSeek, Groq).", 7, C.TEXT_DIM))
             self._body_lay.addWidget(w)
 
         self._body_lay.addWidget(self._sidecar_box_widget())
@@ -830,10 +830,8 @@ class ProvidersOverlay(_HudOverlay):
         head = self._label("BACKGROUND REQUESTS", 9, C.PRI, bold=True)
         w, lay = self._box([head])
         lay.addWidget(self._label(
-            "Reading a document, looking at your screen, writing code — the "
-            "assistant's own requests, not the conversation. These use Gemini's "
-            "text quota, which runs out before the voice does. Sending them "
-            "somewhere else keeps them working, and changes nothing you hear.",
+            "Document parsing, screen analysis, background tasks, and code drafting. "
+            "Route secondary requests to another provider or local server to balance quota.",
             7, C.TEXT_DIM))
 
         # Read the stored choice BEFORE the box exists. The first version asked
@@ -844,18 +842,18 @@ class ProvidersOverlay(_HudOverlay):
         def fmt(entry, _decl):
             mark = "[LOCAL]" if entry.get("local") else (
                 "[CLOUD]" if entry.get("local") is False else "       ")
-            return f"{mark}  Fall back to {entry['label']}"
+            return f"{mark}  Route to {entry['label']}"
 
         self._sidecar_combo = self._service_combo(
-            "llm", ("Gemini only  —  the way it has always been", ""), fmt)
+            "llm", ("Primary provider  —  default API", ""), fmt)
         self._select(self._sidecar_combo, sid)
         self._sidecar_combo.currentIndexChanged.connect(self._sidecar_changed)
         lay.addWidget(self._sidecar_combo)
 
         self._first_combo = self._combo()
-        self._first_combo.addItem("Try Gemini first  —  faster", "after")
+        self._first_combo.addItem("Primary provider first  —  fastest", "after")
         self._first_combo.addItem(
-            "Try the other one first  —  keeps more on your machine", "before")
+            "Secondary / local first  —  keeps processing on device", "before")
         self._first_combo.setCurrentIndex(1 if self._sidecar_first else 0)
         lay.addWidget(self._first_combo)
 
@@ -870,8 +868,7 @@ class ProvidersOverlay(_HudOverlay):
                 self._fields_into(lay, "llm", sid)
         else:
             lay.addWidget(self._label(
-                "Left as it is, these keep using Gemini and stop working when "
-                "its text quota runs out.", 7, C.TEXT_DIM))
+                "Left as default, uses the primary configured provider.", 7, C.TEXT_DIM))
         return w
 
     def _coding_box_widget(self) -> QWidget:
@@ -880,8 +877,7 @@ class ProvidersOverlay(_HudOverlay):
         Separate from background requests because it is the one job where the
         model makes the most difference and the requests are the longest — a
         whole source file at a time. Whatever is picked is tried FIRST for code,
-        with Gemini behind it, so a service having a bad day still produces a
-        project instead of nothing."""
+        with fallback behind it."""
         head = self._label("CODING ENGINE", 9, C.PRI, bold=True)
         w, lay = self._box([head])
         lay.addWidget(self._label(
@@ -894,8 +890,7 @@ class ProvidersOverlay(_HudOverlay):
         def fmt(entry, _decl):
             mark = "[LOCAL]" if entry.get("local") else (
                 "[CLOUD]" if entry.get("local") is False else "       ")
-            star = "   [Recommended]" if entry.get("id") == "minimax" else ""
-            return f"{mark}  Code with {entry['label']}{star}"
+            return f"{mark}  Code with {entry['label']}"
 
         self._coding_combo = self._service_combo(
             "llm", ("Same as background requests", ""), fmt)
@@ -947,14 +942,13 @@ class ProvidersOverlay(_HudOverlay):
     def _update_footer(self) -> None:
         if self._mode != "pipeline":
             self._footer.setText(
-                "Gemini Live. Nothing on this panel changes the conversation.")
+                "Direct live engine active. Unified voice, vision, and tool pipeline.")
             return
         missing = [name for slot, _n, name, _w in self._SLOTS
                    if not self._pipe.get(slot)]
         if "THINKING" in missing:
             self._footer.setText(
-                "⚠  ② THINKING is not set — without it the assistant falls back "
-                "to Gemini Live and says so in the log.")
+                "⚠  ② THINKING is not set — select a local or cloud LLM model above.")
         elif missing:
             words = " and ".join(f"{m.lower()}" for m in missing)
             self._footer.setText(

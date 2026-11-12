@@ -109,6 +109,9 @@ class HudCanvas(QWidget):
         self._btn_zoom_in = QRectF()
         self._btn_zoom_out = QRectF()
         self._btn_recenter = QRectF()
+        self._btn_redirect = QRectF()
+        self._loc_label_rect = QRectF()
+        self._sched_rect = QRectF()
         self._map_pixmap: QPixmap | None = None
         try:
             from pathlib import Path
@@ -253,6 +256,55 @@ class HudCanvas(QWidget):
         except Exception:
             pass
 
+    def _open_map_redirect(self):
+        try:
+            from core.location import open_live_map
+            pan_x = getattr(self, "_map_pan_x", 0.0)
+            pan_y = getattr(self, "_map_pan_y", 0.0)
+            zoom = getattr(self, "_map_zoom", 1.0)
+            cur_lat = 15.5016 - (pan_y / zoom) * 0.00035
+            cur_lon = 73.8234 + (pan_x / zoom) * 0.00035
+            open_live_map(cur_lat, cur_lon)
+            self.append_hud_log("MAP: Satellite navigation coordinates opened in browser.")
+        except Exception as e:
+            print(f"[HUD] map redirect: {e}")
+
+    def _get_active_schedules(self) -> list[str]:
+        items = []
+        try:
+            from pathlib import Path
+            import json
+            routines_file = Path(__file__).resolve().parent.parent / "memory" / "routines.json"
+            if routines_file.exists():
+                data = json.loads(routines_file.read_text(encoding="utf-8"))
+                day_map = {1: "MON", 2: "TUE", 3: "WED", 4: "THU", 5: "FRI", 6: "SAT", 7: "SUN"}
+                for r in data.get("routines", []):
+                    if not r.get("enabled", True):
+                        continue
+                    if r.get("builtin") in ("briefing", "checkin"):
+                        continue
+                    name = r.get("name") or r.get("text") or "Task"
+                    trig = r.get("trigger", {})
+                    time_info = ""
+                    if trig.get("type") == "time":
+                        rule = trig.get("rule", {})
+                        t = rule.get("time", "")
+                        days = rule.get("days", [])
+                        day_str = ",".join(day_map.get(d, str(d)) for d in days)
+                        time_info = f"[{day_str} {t}] " if day_str else (f"[{t}] " if t else "")
+                    items.append(f"{time_info}{name}")
+        except Exception:
+            pass
+        return items
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.position()
+            if hasattr(self, "_map_rect") and self._map_rect.contains(pos):
+                self._open_map_redirect()
+                return
+        super().mouseDoubleClickEvent(event)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             pos = event.position()
@@ -262,7 +314,15 @@ class HudCanvas(QWidget):
                     self.on_exit_hud()
                 return
 
-            # 2. Interactive Map Widget Controls (NO browser redirect!)
+            # 2. Map Redirect Link Button [↗] or Location Label
+            if hasattr(self, "_btn_redirect") and self._btn_redirect.contains(pos):
+                self._open_map_redirect()
+                return
+            if hasattr(self, "_loc_label_rect") and self._loc_label_rect.contains(pos):
+                self._open_map_redirect()
+                return
+
+            # 3. Interactive Map Widget Controls
             if hasattr(self, "_btn_zoom_in") and self._btn_zoom_in.contains(pos):
                 self._map_zoom = min(2.5, self._map_zoom + 0.3)
                 self.update()
@@ -281,6 +341,12 @@ class HudCanvas(QWidget):
             if hasattr(self, "_map_rect") and self._map_rect.contains(pos):
                 self._map_dragging = True
                 self._map_drag_start = QPointF(pos)
+                return
+
+            # 4. Schedule Widget click
+            if hasattr(self, "_sched_rect") and self._sched_rect.contains(pos):
+                self.append_hud_log("SCHEDULE: Active timetable synced from memory.")
+                self.update()
                 return
 
         super().mousePressEvent(event)
@@ -319,6 +385,7 @@ class HudCanvas(QWidget):
             elif angle < 0:
                 self._map_zoom = max(0.5, self._map_zoom - 0.15)
             self.update()
+            event.accept()
             return
         super().wheelEvent(event)
 
@@ -676,9 +743,9 @@ class HudCanvas(QWidget):
         cx, cy = W / 2, H / 2
         fw = min(W, H)
         # The state line and waveform sit at the bottom edge so the central HUD stays movie-clean
-        sy = H - 42.0
+        state_y = H - 42.0
         band_t = 15.0
-        band_h = max(60.0, sy - 20.0 - band_t)
+        band_h = max(60.0, state_y - 20.0 - band_t)
 
         if self._avatar is not None and self.hud_style == "face":
             r_head = min(fw * 0.355, band_h / (self._avatar.SPAN + 0.08))
@@ -775,12 +842,12 @@ class HudCanvas(QWidget):
             pan_y = getattr(self, "_map_pan_y", 0.0)
             center_x = pw / 2.0 - (pan_x * (pw / mw))
             center_y = ph / 2.0 - (pan_y * (ph / mh))
-            sx = max(0.0, min(pw - sw, center_x - sw / 2.0))
-            sy = max(0.0, min(ph - sh, center_y - sh / 2.0))
+            msx = max(0.0, min(pw - sw, center_x - sw / 2.0))
+            msy = max(0.0, min(ph - sh, center_y - sh / 2.0))
             p.drawPixmap(
                 QRectF(mx + 1, my + 1, mw - 2, mh - 2),
                 self._map_pixmap,
-                QRectF(sx, sy, sw, sh)
+                QRectF(msx, msy, sw, sh)
             )
             # Subtle amber overlay tint to match holographic HUD
             p.fillRect(QRectF(mx + 1, my + 1, mw - 2, mh - 2), QColor(255, 157, 0, 22))
@@ -834,20 +901,80 @@ class HudCanvas(QWidget):
             else:
                 p.drawEllipse(QPointF(bcx, bcy), 2.8, 2.8)
 
+        # External map redirect button [↗] on bottom-left of map widget
+        self._btn_redirect = QRectF(mx + 6, my + mh - 18, 14, 14)
+        p.setPen(QPen(blend(C.PRI, 0.70), 1.0))
+        p.setBrush(QBrush(QColor(15, 10, 3, 210)))
+        p.drawRoundedRect(self._btn_redirect, 2, 2)
+        p.setPen(QPen(blend(C.PRI, 0.95), 1.2))
+        rx, ry = self._btn_redirect.center().x(), self._btn_redirect.center().y()
+        p.drawLine(QLineF(rx - 2.5, ry + 2.5, rx + 2.5, ry - 2.5))
+        p.drawLine(QLineF(rx + 2.5, ry - 2.5, rx - 0.5, ry - 2.5))
+        p.drawLine(QLineF(rx + 2.5, ry - 2.5, rx + 2.5, ry + 0.5))
+
         # Bottom info prompt
         p.setFont(px_font(7, QFont.Weight.Bold, mono=True, spacing=1.0))
         p.setPen(QPen(blend(C.TEXT_DIM, 0.85)))
         mode_hint = "DRAG / WHEEL" if getattr(self, "_map_dragging", False) else f"GPS [{zoom:.1f}x]"
-        p.drawText(QRectF(mx + 6, my + mh - 14, mw - 12, 12), Qt.AlignmentFlag.AlignRight, mode_hint)
+        p.drawText(QRectF(mx + 24, my + mh - 15, mw - 30, 12), Qt.AlignmentFlag.AlignRight, mode_hint)
         p.restore()
 
-        # Real location label beneath map box
+        # Real location label beneath map box (clickable redirect)
         loc_label = self._loc_info.get("label", "PANJIM, GOA")
+        self._loc_label_rect = QRectF(mx - 20, my + mh + 4, mw + 20, 16)
         p.setFont(px_font(8, QFont.Weight.Bold, mono=True, spacing=1.2))
         p.setPen(QPen(blend(C.PRI, 0.95)))
-        p.drawText(QRectF(mx - 20, my + mh + 4, mw + 20, 16),
+        p.drawText(self._loc_label_rect,
                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                   loc_label)
+                   loc_label + " ↗")
+
+        # ── Bottom-Left Active Schedule & Timetable Widget ────────────────
+        sw, sh = 310.0, 116.0
+        sx = 24.0
+        sy_box = H - sh - 30.0
+        self._sched_rect = QRectF(sx, sy_box, sw, sh)
+
+        p.save()
+        p.setPen(QPen(blend(C.BORDER_B, 0.90), 1.2))
+        p.setBrush(QBrush(QColor(18, 10, 2, 230)))
+        p.drawRect(self._sched_rect)
+
+        # Top header
+        p.setFont(px_font(7, QFont.Weight.Bold, mono=True, spacing=1.2))
+        p.setPen(QPen(blend(C.PRI, 0.95)))
+        p.drawText(QRectF(sx + 8, sy_box + 5, sw - 16, 12), Qt.AlignmentFlag.AlignLeft, "ACTIVE SCHEDULE & TIMETABLE")
+
+        p.setPen(QPen(blend(C.BORDER, 0.50), 1.0))
+        p.drawLine(QLineF(sx + 8, sy_box + 20, sx + sw - 8, sy_box + 20))
+
+        # Rows of tasks
+        schedules = self._get_active_schedules()
+        f_item = px_font(7, QFont.Weight.Medium, mono=True)
+        p.setFont(f_item)
+        if schedules:
+            for idx, item_str in enumerate(schedules[:4]):
+                row_y = sy_box + 24.0 + idx * 17.0
+                p.setPen(QPen(blend(C.PRI, 0.85)))
+                p.drawText(QRectF(sx + 8, row_y, 10, 16), Qt.AlignmentFlag.AlignLeft, "•")
+                p.setPen(QPen(blend(C.TEXT, 0.90)))
+                trunc_sched = item_str[:42] + "..." if len(item_str) > 45 else item_str
+                p.drawText(QRectF(sx + 20, row_y, sw - 28, 16), Qt.AlignmentFlag.AlignLeft, trunc_sched)
+        else:
+            p.setPen(QPen(blend(C.TEXT_DIM, 0.75)))
+            p.drawText(QRectF(sx + 8, sy_box + 45, sw - 16, 16), Qt.AlignmentFlag.AlignCenter, "NO UPCOMING TASKS SCHEDULED")
+
+        # Bottom status indicator
+        p.setFont(px_font(6, QFont.Weight.Bold, mono=True, spacing=1.0))
+        p.setPen(QPen(blend(C.TEXT_DIM, 0.80)))
+        p.drawText(QRectF(sx + 8, sy_box + sh - 14, sw - 16, 12), Qt.AlignmentFlag.AlignRight, "LIVE TIMETABLE SYNC")
+        p.restore()
+
+        # Label beneath schedule box
+        p.setFont(px_font(8, QFont.Weight.Bold, mono=True, spacing=1.2))
+        p.setPen(QPen(blend(C.PRI, 0.95)))
+        p.drawText(QRectF(sx, sy_box + sh + 4, sw, 16),
+                   Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                   "SYSTEM CALENDAR & REMINDERS")
 
         # state line: spaced capitals between two fading rules that pulse
         if self.muted:
@@ -863,7 +990,7 @@ class HudCanvas(QWidget):
         p.setFont(px_font(13, QFont.Weight.DemiBold, spacing=5))
         tw = p.fontMetrics().horizontalAdvance(txt)
         p.setPen(QPen(col))
-        p.drawText(QRectF(0, sy, W, 22), Qt.AlignmentFlag.AlignCenter, txt)
+        p.drawText(QRectF(0, state_y, W, 22), Qt.AlignmentFlag.AlignCenter, txt)
         pulse = 0.85 if (self._blink or self.speaking or self.muted) else 0.40
         rule = min(110.0, W * 0.12)
         for sgn in (-1, 1):
@@ -872,11 +999,11 @@ class HudCanvas(QWidget):
             lg.setColorAt(0.0, with_alpha(col, pulse))
             lg.setColorAt(1.0, with_alpha(col, 0.0))
             p.setPen(QPen(QBrush(lg), 1))
-            p.drawLine(QLineF(x0, sy + 11, x0 + sgn * rule, sy + 11))
+            p.drawLine(QLineF(x0, state_y + 11, x0 + sgn * rule, state_y + 11))
 
         # waveform — the real audio level (the mic while listening, the voice
         # while speaking), mirrored below its baseline like a reflection
-        wy = sy + 50
+        wy = state_y + 50
         N = 48
         span = min(W * 0.60, 420.0)
         bw = span / N

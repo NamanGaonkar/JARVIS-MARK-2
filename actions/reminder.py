@@ -340,6 +340,7 @@ def reminder(
 
     if player:
         player.write_log(f"[Reminder] ✅ {date_str} {time_str} — {safe_msg[:40]}")
+        player.show_content("SCHEDULED REMINDER", f"Task: {safe_msg}\nTime: {friendly_time}")
 
     friendly_time = target_dt.strftime("%B %d at %I:%M %p")
     return f"Reminder set for {friendly_time}.{phone}"

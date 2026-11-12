@@ -172,6 +172,7 @@ class MainWindow(QMainWindow):
         body = QHBoxLayout()
         body.setContentsMargins(10, 10, 10, 10)
         body.setSpacing(10)
+        self._body_lay = body
 
         self._left_panel = self._build_left_panel()
         body.addWidget(self._left_panel, stretch=0)
@@ -1141,13 +1142,46 @@ class MainWindow(QMainWindow):
         """Toggle pure cinematic movie HUD view (matching Tony Stark's JARVIS HUD)."""
         is_movie = getattr(self, "_movie_mode", False)
         self._movie_mode = not is_movie
-        self._left_panel.setVisible(is_movie)
-        self._right_panel.setVisible(is_movie)
-        self._header.setVisible(is_movie)
-        if hasattr(self, "_status_strip"):
-            self._status_strip.setVisible(is_movie)
-        if hasattr(self, "_content_panel"):
-            self._content_panel.setVisible(False)
+
+        if not is_movie:
+            # Entering pure HUD view — ensure no top bar elements, drawers or panels bleed in
+            self._header.hide()
+            for child in self._header.findChildren(QWidget):
+                child.hide()
+            self._left_panel.hide()
+            self._right_panel.hide()
+            if hasattr(self, "_status_strip"):
+                self._status_strip.hide()
+            if hasattr(self, "_content_panel"):
+                self._content_panel.hide()
+            if hasattr(self, "_quick_drawer"):
+                self._quick_drawer.hide()
+            if hasattr(self, "_ctrl_drawer"):
+                self._ctrl_drawer.hide()
+            if hasattr(self, "_drawer_btn"):
+                self._drawer_btn.setChecked(False)
+            if hasattr(self, "_ctrl_btn"):
+                self._ctrl_btn.setChecked(False)
+            if hasattr(self, "_cam_preview"):
+                self._cam_preview.hide()
+            if hasattr(self, "_clipboard_panel"):
+                self._clipboard_panel.hide()
+            if hasattr(self, "_body_lay"):
+                self._body_lay.setContentsMargins(0, 0, 0, 0)
+                self._body_lay.setSpacing(0)
+        else:
+            # Returning to Workstation view
+            self._header.show()
+            for child in self._header.findChildren(QWidget):
+                child.show()
+            self._left_panel.show()
+            self._right_panel.show()
+            if hasattr(self, "_status_strip"):
+                self._status_strip.show()
+            if hasattr(self, "_body_lay"):
+                self._body_lay.setContentsMargins(10, 10, 10, 10)
+                self._body_lay.setSpacing(10)
+            self._fit_side_columns()
 
     def _toggle_fullscreen(self):
         if self.isFullScreen():
