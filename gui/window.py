@@ -178,6 +178,7 @@ class MainWindow(QMainWindow):
 
         # Center column: HUD + resizable content panel via QSplitter
         self.hud = HudCanvas(face_path, _display)
+        self.hud.on_exit_hud = self._toggle_movie_mode
         self.hud.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._content_panel = self._build_content_panel()
         self._quiz_panel = self._build_quiz_panel()
@@ -435,7 +436,18 @@ class MainWindow(QMainWindow):
         sc_full = QShortcut(QKeySequence("F11"), self)
         sc_full.activated.connect(self._toggle_fullscreen)
         sc_intr = QShortcut(QKeySequence("Escape"), self)
-        sc_intr.activated.connect(self._do_interrupt)
+        sc_intr.activated.connect(self._handle_escape)
+        sc_backspace = QShortcut(QKeySequence("Backspace"), self)
+        sc_backspace.activated.connect(self._handle_backspace)
+
+    def _handle_escape(self):
+        if self._movie_mode:
+            self._toggle_movie_mode()
+        self._do_interrupt()
+
+    def _handle_backspace(self):
+        if self._movie_mode:
+            self._toggle_movie_mode()
 
     def _show_camera_frame(self, img_bytes: bytes):
         """Slot — display camera preview overlay (main thread)."""

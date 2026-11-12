@@ -96,7 +96,20 @@ class HudCanvas(QWidget):
 
         # Live location and clickable interactive real map
         self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._map_rect = QRectF()
+        self._exit_btn_rect = QRectF()
+        self._hover_exit = False
+        self.on_exit_hud = None
+        self._map_pixmap: QPixmap | None = None
+        try:
+            from pathlib import Path
+            map_path = Path("config/tactical_map.png")
+            if map_path.exists():
+                self._map_pixmap = QPixmap(str(map_path))
+        except Exception:
+            self._map_pixmap = None
+
         try:
             from core.location import get_location
             self._loc_info = get_location()
@@ -233,24 +246,41 @@ class HudCanvas(QWidget):
             pass
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and hasattr(self, "_map_rect"):
+        if event.button() == Qt.MouseButton.LeftButton:
             pos = event.position()
-            if self._map_rect.contains(pos):
+            if hasattr(self, "_exit_btn_rect") and self._exit_btn_rect.contains(pos):
+                if hasattr(self, "on_exit_hud") and callable(self.on_exit_hud):
+                    self.on_exit_hud()
+                return
+            if hasattr(self, "_map_rect") and self._map_rect.contains(pos):
                 try:
                     from core.location import open_live_map
                     open_live_map()
-                    self.append_hud_log("MAP: Real-time satellite map opened in browser.")
+                    self.append_hud_log("MAP: Satellite navigation coordinates opened.")
                 except Exception as e:
                     print(f"[HUD] map click: {e}")
                 return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if hasattr(self, "_map_rect") and self._map_rect.contains(event.position()):
+        pos = event.position()
+        hover_exit = hasattr(self, "_exit_btn_rect") and self._exit_btn_rect.contains(pos)
+        hover_map = hasattr(self, "_map_rect") and self._map_rect.contains(pos)
+        if getattr(self, "_hover_exit", False) != hover_exit:
+            self._hover_exit = hover_exit
+            self.update()
+        if hover_exit or hover_map:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
         else:
             self.unsetCursor()
         super().mouseMoveEvent(event)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Escape, Qt.Key.Key_F10):
+            if hasattr(self, "on_exit_hud") and callable(self.on_exit_hud):
+                self.on_exit_hud()
+                return
+        super().keyPressEvent(event)
 
     def _make_grid(self, W: int, H: int) -> QPixmap:
         """Pre-render the static backdrop — pure cinematic black void with soft amber core radiance."""
@@ -627,6 +657,18 @@ class HudCanvas(QWidget):
             r = min(W * 0.46, band_h / 2.0)
             self._paint_core_classic(p, cx, band_t + band_h / 2.0, r, W, band_h)
 
+        # ── Top-Left Back / Exit HUD Button ───────────────────────────────
+        self._exit_btn_rect = QRectF(24.0, 18.0, 150.0, 30.0)
+        is_hover_exit = bool(getattr(self, "_hover_exit", False))
+        p.save()
+        p.setPen(QPen(blend(C.PRI, 0.95 if is_hover_exit else 0.45), 1.2))
+        p.setBrush(QBrush(QColor(255, 157, 0, 50 if is_hover_exit else 14)))
+        p.drawRoundedRect(self._exit_btn_rect, 4, 4)
+        p.setFont(px_font(9, QFont.Weight.Bold, mono=True, spacing=1.0))
+        p.setPen(QPen(blend(C.PRI if is_hover_exit else C.TEXT, 0.95)))
+        p.drawText(self._exit_btn_rect, Qt.AlignmentFlag.AlignCenter, "< WORKSTATION [ESC]")
+        p.restore()
+
         # ── Top-Right HUD Clock (Movie accurate) ──────────────────────────
         clock_str = time.strftime("%H:%M:%S")
         date_str = time.strftime("%a %d %b %Y").upper()
@@ -657,50 +699,56 @@ class HudCanvas(QWidget):
             p.drawText(QRectF(log_x + 130, y_pos, 280, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, trunc_msg)
 
         # ── Bottom-Right Interactive Real Map Widget ──────────────────────
-        mw, mh = 154.0, 108.0
+        mw, mh = 168.0, 116.0
         mx = W - mw - 24.0
         my = H - mh - 30.0
         self._map_rect = QRectF(mx, my, mw, mh)
 
         p.save()
         p.setPen(QPen(blend(C.BORDER_B, 0.90), 1.2))
-        p.setBrush(QBrush(QColor(56, 34, 6, 230)))
+        p.setBrush(QBrush(QColor(18, 10, 2, 230)))
         p.drawRect(self._map_rect)
 
-        # Tactical vector map lines representing real GPS navigation grid
         p.setClipRect(QRectF(mx + 1, my + 1, mw - 2, mh - 2))
-        p.setPen(QPen(blend(C.PRI_DIM, 0.35), 1.0))
-        for gx in range(int(mx) + 14, int(mx + mw), 22):
-            p.drawLine(QLineF(gx, my, gx, my + mh))
-        for gy in range(int(my) + 12, int(my + mh), 18):
-            p.drawLine(QLineF(mx, gy, mx + mw, gy))
-        p.setPen(QPen(blend(C.PRI, 0.75), 1.6))
-        p.drawLine(QLineF(mx + 8, my + mh - 16, mx + 55, my + 30))
-        p.drawLine(QLineF(mx + 55, my + 30, mx + mw - 8, my + 14))
-        p.setPen(QPen(blend(C.ACC, 0.60), 1.2))
-        p.drawLine(QLineF(mx, my + 55, mx + mw, my + 45))
-        p.drawLine(QLineF(mx + 92, my, mx + 76, my + mh))
 
-        # Real-time pulsating GPS location crosshair
-        blip_x, blip_y = mx + 88.0, my + 44.0
+        # Render the actual real tactical street map
+        if self._map_pixmap is not None and not self._map_pixmap.isNull():
+            p.drawPixmap(
+                QRectF(mx + 1, my + 1, mw - 2, mh - 2),
+                self._map_pixmap,
+                QRectF(0, 0, self._map_pixmap.width(), self._map_pixmap.height())
+            )
+            # Subtle amber overlay tint to match holographic HUD
+            p.fillRect(QRectF(mx + 1, my + 1, mw - 2, mh - 2), QColor(255, 157, 0, 25))
+        else:
+            p.setPen(QPen(blend(C.PRI_DIM, 0.35), 1.0))
+            for gx in range(int(mx) + 14, int(mx + mw), 22):
+                p.drawLine(QLineF(gx, my, gx, my + mh))
+            for gy in range(int(my) + 12, int(my + mh), 18):
+                p.drawLine(QLineF(mx, gy, mx + mw, gy))
+
+        # Real-time pulsating GPS location crosshair right in center
+        blip_x, blip_y = mx + mw / 2.0, my + mh / 2.0
         pulse = 0.5 + 0.5 * math.sin(self._tick * 0.15)
         p.setPen(QPen(blend(C.WHITE, 0.95), 1.2))
-        p.drawLine(QLineF(blip_x - 8, blip_y, blip_x + 8, blip_y))
-        p.drawLine(QLineF(blip_x, blip_y - 8, blip_x, blip_y + 8))
+        p.drawLine(QLineF(blip_x - 10, blip_y, blip_x + 10, blip_y))
+        p.drawLine(QLineF(blip_x, blip_y - 10, blip_x, blip_y + 10))
+        p.setPen(QPen(blend(C.ACC, 0.80), 1.0))
+        p.drawEllipse(QPointF(blip_x, blip_y), 6.0 + 4.0 * pulse, 6.0 + 4.0 * pulse)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(with_alpha(C.ACC, 0.55 * pulse)))
-        p.drawEllipse(QPointF(blip_x, blip_y), 4.5 + 3.5 * pulse, 4.5 + 3.5 * pulse)
+        p.setBrush(QBrush(with_alpha(C.ACC, 0.60 * pulse)))
+        p.drawEllipse(QPointF(blip_x, blip_y), 3.0, 3.0)
 
         # Top coordinate badge
         coords_txt = self._loc_info.get("coords_str", "15.5016° N, 73.8234° E")
         p.setFont(px_font(7, QFont.Weight.Medium, mono=True))
-        p.setPen(QPen(blend(C.PRI_DIM, 0.85)))
+        p.setPen(QPen(blend(C.PRI, 0.95)))
         p.drawText(QRectF(mx + 6, my + 4, mw - 12, 12), Qt.AlignmentFlag.AlignLeft, coords_txt)
 
         # Bottom click prompt
         p.setFont(px_font(6, QFont.Weight.Bold, mono=True, spacing=1.0))
-        p.setPen(QPen(blend(C.TEXT_DIM, 0.80)))
-        p.drawText(QRectF(mx + 6, my + mh - 14, mw - 12, 12), Qt.AlignmentFlag.AlignRight, "LIVE GPS · CLICK TO OPEN")
+        p.setPen(QPen(blend(C.TEXT_DIM, 0.85)))
+        p.drawText(QRectF(mx + 6, my + mh - 14, mw - 12, 12), Qt.AlignmentFlag.AlignRight, "LIVE GPS LOCK")
         p.restore()
 
         # Real location label beneath map box

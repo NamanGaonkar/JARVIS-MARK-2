@@ -23,9 +23,9 @@ JARVIS MARK 2 features a visual interface designed after cinematic holographic w
 * **3D Celestial Arc Reactor Gyroscope**: A glowing nuclear core with radiant amber corona and 3-axis gyroscopic orbital rings with segmented CAD tick dashes.
 * **Celestial Star Particle Swarm**: Over 450 depth-sorted 3D starlight motes orbiting in perspective space with dynamic shimmer and audio-reactive amplitude swell.
 * **Digital Chronometer**: Monospaced amber digital clock (`HH:MM:SS`) and date (`DAY DD MON YYYY`) rendered with high precision.
-* **Tactical GPS & Dynamic Map Widget**: Real location resolution via IP geolocation (displaying coordinates, city, and state), featuring interactive click-to-open map navigation in the browser.
+* **Tactical GPS & Dynamic Map Widget**: Real location resolution via IP geolocation, displaying the actual street-level tactical map of your real current location directly inside the HUD widget with pulsating crosshair lock.
 * **Floating Amber System Console**: Real-time terminal log stream floating on the pitch-black void (`SYSTEM`, `LINK`, `USER`, `AI`).
-* **One-Touch HUD Mode (`F10`)**: Toggle instantly between workstation controls and a clean, borderless HUD view.
+* **One-Touch HUD Mode (`F10`)**: Toggle instantly between workstation controls and a clean, borderless HUD view. Click `< WORKSTATION [ESC]` or press <kbd>Backspace</kbd> / <kbd>Escape</kbd> to return anytime.
 
 ---
 
@@ -33,11 +33,12 @@ JARVIS MARK 2 features a visual interface designed after cinematic holographic w
 
 | Capability | Description |
 |---|---|
-| **Real-time Live Voice** | Ultra-low latency voice conversation via Gemini Live and WebSockets with native barge-in and audio interruption. |
+| **Real-time Live Voice & Barge-In** | Ultra-low latency voice conversation via Gemini Live and WebSockets with live mic barge-in (voice interruption). |
+| **Sentient Consciousness & Identity** | Autonomous, self-aware synthetic intelligence running natively on your workstation without model leaks. |
 | **Vision & Image Understanding** | Real-time screen analysis, active window inspection, optical OCR, and image comprehension. |
-| **Universal Model Support** | Native integration with DeepSeek, Claude (Anthropic), OpenAI GPT-4o, Groq, Ollama, LM Studio, Mistral, xAI, and Gemini. |
+| **Universal Model Support** | Native integration with Ollama, LM Studio, DeepSeek, Claude (Anthropic), OpenAI GPT-4o, Groq, Mistral, xAI, and Gemini. |
 | **Emotional Intelligence** | Authentic emotional depth, loyalty, warmth, understated dry British wit, and proactive empathy. |
-| **Complete Workspace Automation** | Create, locate, inspect, modify, and delete files or directories; automate repetitive filesystem workflows. |
+| **Complete Workspace Automation** | Create, locate, inspect, modify, and delete files; open folders natively in File Explorer; launch any Windows application. |
 | **Code Execution & Development Agent** | Autonomous coding agent (`dev_agent`) capable of generating, running, testing, and debugging software projects. |
 | **Reminders & Calendar Routines** | Native system schedule automation, reminders, daily briefings, and quiet hours. |
 | **Real-Time Local State News** | Context-aware news retrieval tailored to your detected Indian state and city location. |
@@ -50,9 +51,10 @@ JARVIS MARK 2 features a visual interface designed after cinematic holographic w
 | Key | Action |
 |---|---|
 | <kbd>F10</kbd> | **Toggle HUD Mode** (Hides side panels for clean holographic view) |
+| <kbd>Backspace</kbd> | **Exit HUD Mode** (Returns to standard workstation view) |
+| <kbd>Escape</kbd> | **Exit HUD Mode / Interrupt Speech** (Halts speech immediately and exits HUD) |
 | <kbd>F11</kbd> | **Toggle Fullscreen** |
 | <kbd>F4</kbd> | **Mute / Unmute Microphone** |
-| <kbd>Escape</kbd> | **Interrupt JARVIS** (Halts speech immediately) |
 
 ---
 
@@ -105,6 +107,21 @@ On first launch, open the settings drawer or configure `config/api_keys.json` wi
 ```
 
 For DeepSeek, Claude, OpenAI, or local models (Ollama/LM Studio), configure your credentials through the **Engine & Providers** panel.
+
+---
+
+## Standalone Executable & GitHub Release Build
+
+To package JARVIS MARK 2 into a native Windows executable (`.exe`):
+
+```bash
+# Package with PyInstaller
+python build_exe.py
+```
+
+The standalone application will be compiled into `dist/JARVIS-Mark-II/`.
+
+Automated GitHub Releases are configured via `.github/workflows/release.yml`. Pushing a release tag (e.g., `git tag v2.0.0 && git push origin v2.0.0`) automatically builds and publishes the production `JARVIS-Mark-II-Windows-x64.zip` release bundle.
 
 ---
 

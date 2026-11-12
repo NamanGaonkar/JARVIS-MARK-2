@@ -266,6 +266,24 @@ def create_folder(path: str, name: str = "") -> str:
         return f"Could not create folder: {e}"
 
 
+def open_folder(path: str, name: str = "") -> str:
+    """Open a folder or file in the native file explorer."""
+    try:
+        base   = _resolve_path(path)
+        target = (base / name) if name else base
+        if not target.exists():
+            return f"Cannot find '{target}'."
+        if _OS == "Windows":
+            os.startfile(str(target))
+        elif _OS == "Darwin":
+            subprocess.Popen(["open", str(target)])
+        else:
+            subprocess.Popen(["xdg-open", str(target)])
+        return f"Opened folder: {target.name or target}"
+    except Exception as e:
+        return f"Could not open folder: {e}"
+
+
 def delete_file(path: str, name: str = "") -> str:
     try:
         base   = _resolve_path(path)
@@ -669,6 +687,9 @@ def file_controller(
         elif action == "create_folder":
             return create_folder(path, name=name)
 
+        elif action in ("open_folder", "open", "explore", "show"):
+            return open_folder(path, name=name)
+
         elif action == "delete":
             return delete_file(path, name=name)
 
@@ -730,7 +751,7 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info"
+                "description": "list | create_file | create_folder | open_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info"
             },
             "path": {
                 "type": "STRING",

@@ -90,19 +90,51 @@ def _desktop_search(app_name: str) -> bool:
 
 
 def _launch_windows(app_name: str) -> bool:
-    """-> was a launch REQUESTED successfully. Never 'did it open'.
+    """Launch an application or open a folder on Windows reliably."""
+    name_clean = app_name.strip()
+    name_lower = name_clean.lower()
 
-    Three routes, none of them a shell:
+    # 1. Known special folders & Explorer navigation
+    folder_aliases = {
+        "downloads": Path.home() / "Downloads",
+        "download": Path.home() / "Downloads",
+        "desktop": Path.home() / "Desktop",
+        "documents": Path.home() / "Documents",
+        "document": Path.home() / "Documents",
+        "pictures": Path.home() / "Pictures",
+        "photos": Path.home() / "Pictures",
+        "videos": Path.home() / "Videos",
+        "music": Path.home() / "Music",
+        "home": Path.home(),
+        "user folder": Path.home(),
+    }
+    if name_lower in folder_aliases:
+        target_dir = folder_aliases[name_lower]
+        if target_dir.exists():
+            try:
+                os.startfile(str(target_dir))
+                return True
+            except Exception as e:
+                print(f"[open_app] open folder failed for {target_dir}: {e}")
 
-      1. an executable on PATH, started as a one-element argument vector. The
-         old code passed the raw string with shell=True, which is what let
-         "notepad.exe & whoami" run two things.
-      2. a URI scheme such as `ms-settings:` — handed to the OS handler with
-         os.startfile, which is what the shell would have called anyway,
-         without a command line for anything to be appended to.
-      3. the Start Menu, typed like a person would.
-    """
-    resolved = shutil.which(app_name)
+    if name_lower in ("explorer", "file explorer", "files"):
+        try:
+            subprocess.Popen(["explorer.exe"])
+            return True
+        except Exception:
+            pass
+
+    # Direct directory or file path
+    try:
+        p = Path(name_clean)
+        if p.exists():
+            os.startfile(str(p.resolve()))
+            return True
+    except Exception:
+        pass
+
+    # 2. Executable on PATH
+    resolved = shutil.which(name_clean) or shutil.which(f"{name_clean}.exe")
     if resolved:
         try:
             subprocess.Popen(
@@ -114,18 +146,49 @@ def _launch_windows(app_name: str) -> bool:
         except Exception as exc:
             print(f"[open_app] Popen failed for {resolved!r}: {exc}")
 
-    # A scheme, not a path: "ms-settings:", "spotify:", "steam://run/...".
-    # Checked before ":" appears anywhere else — a Windows path has one too,
-    # at index 1, and that is a file, not a scheme.
-    scheme, _, rest = app_name.partition(":")
+    # 3. Windows App Paths Registry (covers Chrome, Code, Notepad, Spotify, etc.)
+    try:
+        import winreg
+        app_candidates = [name_clean, name_lower]
+        if not name_lower.endswith(".exe"):
+            app_candidates.append(f"{name_clean}.exe")
+            app_candidates.append(f"{name_lower}.exe")
+        for candidate in app_candidates:
+            for root_key in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+                sub_key = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{candidate}"
+                try:
+                    with winreg.OpenKey(root_key, sub_key) as key:
+                        app_path, _ = winreg.QueryValueEx(key, "")
+                        if app_path and os.path.exists(app_path):
+                            subprocess.Popen(
+                                [app_path],
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                            )
+                            return True
+                except OSError:
+                    continue
+    except Exception as exc:
+        print(f"[open_app] Registry lookup error: {exc}")
+
+    # 4. URI Scheme (e.g. ms-settings:, spotify:)
+    scheme, _, rest = name_clean.partition(":")
     if rest and scheme and scheme.isalnum() and len(scheme) > 1:
         try:
-            os.startfile(app_name)               # noqa: S606 — no shell involved
+            os.startfile(name_clean)
             return True
         except Exception as exc:
-            print(f"[open_app] startfile failed for {app_name!r}: {exc}")
+            print(f"[open_app] startfile failed for scheme {name_clean!r}: {exc}")
 
-    return _desktop_search(app_name)
+    # 5. Direct os.startfile attempt for known registered commands
+    try:
+        os.startfile(name_clean)
+        return True
+    except Exception:
+        pass
+
+    # 6. Fallback: Desktop Start Menu Search
+    return _desktop_search(name_clean)
 
 
 def _launch_macos(app_name: str) -> bool:

@@ -113,3 +113,6 @@ def get_news_query_for_location() -> str:
     region = loc.get("region", "India")
     city = loc.get("city", "")
     return f"{city} {region} latest news India"
+
+
+get_cached_or_fresh_location = get_location

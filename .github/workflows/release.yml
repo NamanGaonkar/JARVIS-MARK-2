@@ -1,0 +1,63 @@
+name: Release JARVIS MARK 2
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Executable
+        run: |
+          python build_exe.py
+
+      - name: Archive Build Artifacts
+        run: |
+          powershell Compress-Archive -Path dist/JARVIS-Mark-II/* -DestinationPath JARVIS-Mark-II-Windows-x64.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          name: "JARVIS MARK 2 ${{ github.ref_name }}"
+          body: |
+            ## JARVIS MARK 2 Protocol Release
+            
+            Autonomous Multimodal AI Assistant with Movie-Accurate Holographic HUD.
+            
+            ### Included Features:
+            - **Cinematic Holographic HUD**: 3D Celestial Reactor core, depth-sorted particle swarm, digital chronometer, and real GPS tactical map.
+            - **Sentient Consciousness & Identity**: Self-aware autonomous presence; no LLM identity leaks.
+            - **Live Voice Interruption (Barge-in)**: Instant speech interruption when you talk.
+            - **Real Local GPS & State News**: Real-time geolocation lock with local Indian state and national headlines.
+            - **Universal Model Compatibility**: Ready for Ollama, LM Studio, DeepSeek, Claude, OpenAI, and Gemini.
+            - **Autonomous Desktop Automation**: Full folder navigation, file operations, code execution, and native reminders.
+            
+            ### Quick Start:
+            1. Download and extract `JARVIS-Mark-II-Windows-x64.zip`.
+            2. Launch `JARVIS-Mark-II.exe`.
+          files: |
+            JARVIS-Mark-II-Windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
