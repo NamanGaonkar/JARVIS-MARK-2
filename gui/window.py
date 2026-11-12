@@ -190,12 +190,12 @@ class MainWindow(QMainWindow):
         _cam_v.setSpacing(0)
         _cam_hdr = QHBoxLayout()
         _cam_hdr.setContentsMargins(8, 5, 8, 5)
-        _cam_title = QLabel("◈  CAMERA FEED")
+        _cam_title = QLabel("CAMERA FEED")
         _cam_title.setFont(hud_font(8, QFont.Weight.Bold))
         _cam_title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         _cam_hdr.addWidget(_cam_title)
         _cam_hdr.addStretch()
-        _cam_x = QPushButton("✕  CLOSE")
+        _cam_x = QPushButton("CLOSE")
         _cam_x.setFont(hud_font(8, QFont.Weight.Bold))
         _cam_x.setCursor(Qt.CursorShape.PointingHandCursor)
         _cam_x.setStyleSheet(f"""
@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
         _vid_v.setSpacing(4)
 
         _vid_hdr = QHBoxLayout()
-        self._video_title = QLabel("▶  VIDEO")
+        self._video_title = QLabel("VIDEO")
         self._video_title.setFont(hud_font(9, QFont.Weight.Bold))
         self._video_title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         _vid_hdr.addWidget(self._video_title)
@@ -254,14 +254,11 @@ class MainWindow(QMainWindow):
             """)
             return b
 
-        # Muted is the default and the button says so, because a soundtrack
-        # talking over JARVIS is the one way this feature could make the
-        # assistant worse rather than better.
-        self._video_mute_btn = _vid_btn("🔇  SOUND OFF")
+        self._video_mute_btn = _vid_btn("MUTE")
         self._video_mute_btn.clicked.connect(self._toggle_video_mute)
         _vid_hdr.addWidget(self._video_mute_btn)
 
-        _vid_x = _vid_btn("✕  CLOSE")
+        _vid_x = _vid_btn("CLOSE")
         _vid_x.clicked.connect(self.stop_video)
         _vid_hdr.addWidget(_vid_x)
         _vid_v.addLayout(_vid_hdr)
@@ -530,7 +527,7 @@ class MainWindow(QMainWindow):
         self._cam_stop.set()
 
         # A video's title is in its own language; left as written (see _show_content).
-        self._video_title.setText(f"▶  {(title[:44] if title else 'VIDEO')}")
+        self._video_title.setText(title[:44] if title else "VIDEO")
         self._video_split = bool(audio_source)
         self._video_kind = "video"
         self._video_pos_ms = self._video_dur_ms = 0
@@ -711,7 +708,7 @@ class MainWindow(QMainWindow):
     def _sync_video_mute_btn(self) -> None:
         out = self._video_sound_out if self._video_split else self._video_audio
         muted = bool(out and out.isMuted())
-        self._video_mute_btn.setText("🔇  SOUND OFF" if muted else "🔊  SOUND ON")
+        self._video_mute_btn.setText("MUTE" if muted else "UNMUTE")
 
     def _toggle_video_mute(self) -> None:
         out = self._video_sound_out if self._video_split else self._video_audio
@@ -883,7 +880,7 @@ class MainWindow(QMainWindow):
             )
             return True
         except Exception as e:
-            print(f"[Shortcut] ⚠️  Icon generation failed: {e}")
+            print(f"[Shortcut] Icon generation failed: {e}")
             return False
 
     @staticmethod
@@ -1286,7 +1283,7 @@ class MainWindow(QMainWindow):
         clock_col.addWidget(self._date_lbl)
         lay.addLayout(clock_col)
         lay.addSpacing(6)
-        self._movie_btn = QPushButton("◈ MOVIE HUD")
+        self._movie_btn = QPushButton("HUD")
         self._movie_btn.setFont(hud_font(8, QFont.Weight.Bold))
         self._movie_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._movie_btn.setStyleSheet(f"""
@@ -1296,7 +1293,7 @@ class MainWindow(QMainWindow):
             }}
             QPushButton:hover {{ background: {C.BORDER_A}; color: {C.WHITE}; }}
         """)
-        self._movie_btn.setToolTip("Toggle Movie-accurate Cinematic JARVIS HUD  [F10]")
+        self._movie_btn.setToolTip("Toggle Clean HUD View  [F10]")
         self._movie_btn.clicked.connect(self._toggle_movie_mode)
         lay.addWidget(self._movie_btn)
         lay.addSpacing(2)
@@ -1670,21 +1667,14 @@ class MainWindow(QMainWindow):
             return b
 
         _btn("◉  REMOTE CONTROL", self._open_remote, self._BTN_PRI)
-        _btn("⊞  CREATE DESKTOP SHORTCUT", self._create_desktop_shortcut)
-        self._autostart_btn = _btn("◉  AUTO-START: OFF", self._toggle_autostart)
-        _btn("⚙  CUSTOMISE ASSISTANT", self._open_customize)
-        _btn("🎧  AUDIO DEVICES", self._open_audio_devices)
-        _btn("🧠  MEMORY", self._open_memory_panel)
-        _btn("🧩  PLUGINS", self._open_plugin_manager)
-        _btn("⚙  PLUGIN SETTINGS", self._open_plugin_settings)
-        # The button is built here with the rest of the drawer; the panel behind
-        # it — and the whole providers package — is imported on the click. The
-        # drawer used to stutter for a measured 2.104 seconds because a state
-        # check imported openwakeword while it was being built, and adding a
-        # second thing that does that would undo the fix rather than repeat it.
-        # "&&": a single & in a button label is Qt's shortcut marker, and it
-        # was being drawn as an underscore — "ENGINE _PROVIDERS".
-        _btn("🔌  ENGINE && PROVIDERS", self._open_providers)
+        _btn("CREATE DESKTOP SHORTCUT", self._create_desktop_shortcut)
+        self._autostart_btn = _btn("AUTO-START: OFF", self._toggle_autostart)
+        _btn("CUSTOMISE ASSISTANT", self._open_customize)
+        _btn("AUDIO DEVICES", self._open_audio_devices)
+        _btn("MEMORY", self._open_memory_panel)
+        _btn("PLUGINS", self._open_plugin_manager)
+        _btn("PLUGIN SETTINGS", self._open_plugin_settings)
+        _btn("ENGINE && PROVIDERS", self._open_providers)
 
         w.adjustSize()
         return w
@@ -1706,7 +1696,7 @@ class MainWindow(QMainWindow):
             lay.addWidget(button)
             return button
 
-        fs_btn = _row(QPushButton("⛶  FULLSCREEN  [F11]"), self._BTN_DIM)
+        fs_btn = _row(QPushButton("FULLSCREEN  [F11]"), self._BTN_DIM)
         fs_btn.clicked.connect(self._toggle_fullscreen)
 
         self._brief_btn = _row(QPushButton())
@@ -1717,7 +1707,7 @@ class MainWindow(QMainWindow):
         self._wake_sleep_btn = _row(QPushButton())
         self._wake_sleep_btn.clicked.connect(self._tap_wake_manual)
         # Neutral until the real state lands from the background warm-up.
-        self._wake_btn.setText("🎙  WAKE WORD")
+        self._wake_btn.setText("WAKE WORD")
         self._wake_btn.setStyleSheet(self._BTN_DIM)
         self._wake_sleep_btn.hide()
 
@@ -2501,13 +2491,13 @@ class MainWindow(QMainWindow):
             self._wake_btn.setStyleSheet(_off)
             self._wake_sleep_btn.hide()
         elif st["enabled"]:
-            self._wake_btn.setText("🎙  WAKE WORD: ON")
+            self._wake_btn.setText("WAKE WORD: ON")
             self._wake_btn.setStyleSheet(_on)
             self._wake_sleep_btn.show()
-            self._wake_sleep_btn.setText("😴  SLEEP NOW" if st["awake"] else "👂  WAKE NOW")
+            self._wake_sleep_btn.setText("SLEEP NOW" if st["awake"] else "WAKE NOW")
             self._wake_sleep_btn.setStyleSheet(_off)
         else:
-            self._wake_btn.setText("🎙  WAKE WORD: OFF")
+            self._wake_btn.setText("WAKE WORD: OFF")
             self._wake_btn.setStyleSheet(_off)
             self._wake_sleep_btn.hide()
 
@@ -2519,8 +2509,8 @@ class MainWindow(QMainWindow):
         from memory.config_manager import get_push_to_talk_enabled
 
         ptt = get_push_to_talk_enabled()
-        self._ptt_btn.setText(f"🎚  PUSH-TO-TALK: {chord_label()}" if ptt
-                              else "🎚  PUSH-TO-TALK: OFF")
+        self._ptt_btn.setText(f"PUSH-TO-TALK: {chord_label()}" if ptt
+                              else "PUSH-TO-TALK: OFF")
         self._ptt_btn.setStyleSheet(btn_css("on" if ptt else "off"))
         self._ptt_btn.setToolTip(
             "Microphone stays closed until you hold the key — nothing is sent "
@@ -2532,8 +2522,8 @@ class MainWindow(QMainWindow):
         face = get_hud_style() == "face"
         # Neither state is "off", so both read as active — this is a choice
         # between two things, not a switch with a disabled side.
-        self._hud_btn.setText("🧑  HUD: ANIMATED FACE" if face
-                              else "◉  HUD: REACTOR CORE")
+        self._hud_btn.setText("HUD: ANIMATED FACE" if face
+                              else "HUD: REACTOR CORE")
         self._hud_btn.setStyleSheet(btn_css("choice"))
         self._hud_btn.setToolTip(
             "An animated head that speaks your words and shows what JARVIS is "
@@ -2662,7 +2652,7 @@ class MainWindow(QMainWindow):
     def _update_brief_btn(self, enabled: bool):
         if not hasattr(self, '_brief_btn'):
             return
-        self._brief_btn.setText("☀  MORNING BRIEF: ON" if enabled else "☀  MORNING BRIEF: OFF")
+        self._brief_btn.setText("MORNING BRIEF: ON" if enabled else "MORNING BRIEF: OFF")
         self._brief_btn.setStyleSheet(btn_css("on" if enabled else "off"))
 
     def _open_customize(self):

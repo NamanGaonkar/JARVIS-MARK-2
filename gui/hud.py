@@ -90,9 +90,18 @@ class HudCanvas(QWidget):
 
         # Live HUD logs displayed on the left side, matching movie JARVIS HUD
         self._hud_logs: list[tuple[str, str, str]] = [
-            (time.strftime("%H:%M:%S"), "SYSTEM", "JARVIS CORE - DEEPSEEK ONLINE"),
+            (time.strftime("%H:%M:%S"), "SYSTEM", "JARVIS CORE ONLINE"),
             (time.strftime("%H:%M:%S"), "LINK", "BACKEND ONLINE"),
         ]
+
+        # Live location and clickable interactive real map
+        self.setMouseTracking(True)
+        self._map_rect = QRectF()
+        try:
+            from core.location import get_location
+            self._loc_info = get_location()
+        except Exception:
+            self._loc_info = {"city": "Panjim", "region": "Goa", "label": "PANJIM, GOA", "coords_str": "15.5016° N, 73.8234° E"}
 
         self._tick       = 0
         self._scale      = 1.0
@@ -222,6 +231,26 @@ class HudCanvas(QWidget):
             self.update()
         except Exception:
             pass
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and hasattr(self, "_map_rect"):
+            pos = event.position()
+            if self._map_rect.contains(pos):
+                try:
+                    from core.location import open_live_map
+                    open_live_map()
+                    self.append_hud_log("MAP: Real-time satellite map opened in browser.")
+                except Exception as e:
+                    print(f"[HUD] map click: {e}")
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if hasattr(self, "_map_rect") and self._map_rect.contains(event.position()):
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        else:
+            self.unsetCursor()
+        super().mouseMoveEvent(event)
 
     def _make_grid(self, W: int, H: int) -> QPixmap:
         """Pre-render the static backdrop — pure cinematic black void with soft amber core radiance."""
@@ -627,51 +656,60 @@ class HudCanvas(QWidget):
             trunc_msg = msg[:32] + "..." if len(msg) > 35 else msg
             p.drawText(QRectF(log_x + 130, y_pos, 280, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, trunc_msg)
 
-        # ── Bottom-Right Tactical Map Widget (Bengaluru, Karnataka) ───────
-        mw, mh = 150.0, 105.0
+        # ── Bottom-Right Interactive Real Map Widget ──────────────────────
+        mw, mh = 154.0, 108.0
         mx = W - mw - 24.0
         my = H - mh - 30.0
+        self._map_rect = QRectF(mx, my, mw, mh)
 
         p.save()
         p.setPen(QPen(blend(C.BORDER_B, 0.90), 1.2))
-        p.setBrush(QBrush(QColor(62, 38, 8, 225)))
-        p.drawRect(QRectF(mx, my, mw, mh))
+        p.setBrush(QBrush(QColor(56, 34, 6, 230)))
+        p.drawRect(self._map_rect)
 
-        # Tactical vector map lines
+        # Tactical vector map lines representing real GPS navigation grid
         p.setClipRect(QRectF(mx + 1, my + 1, mw - 2, mh - 2))
-        p.setPen(QPen(blend(C.PRI_DIM, 0.40), 1.0))
-        for gx in range(int(mx) + 15, int(mx + mw), 22):
+        p.setPen(QPen(blend(C.PRI_DIM, 0.35), 1.0))
+        for gx in range(int(mx) + 14, int(mx + mw), 22):
             p.drawLine(QLineF(gx, my, gx, my + mh))
         for gy in range(int(my) + 12, int(my + mh), 18):
             p.drawLine(QLineF(mx, gy, mx + mw, gy))
-        p.setPen(QPen(blend(C.PRI, 0.70), 1.6))
-        p.drawLine(QLineF(mx + 10, my + mh - 15, mx + 55, my + 28))
-        p.drawLine(QLineF(mx + 55, my + 28, mx + mw - 8, my + 14))
-        p.setPen(QPen(blend(C.ACC, 0.55), 1.2))
+        p.setPen(QPen(blend(C.PRI, 0.75), 1.6))
+        p.drawLine(QLineF(mx + 8, my + mh - 16, mx + 55, my + 30))
+        p.drawLine(QLineF(mx + 55, my + 30, mx + mw - 8, my + 14))
+        p.setPen(QPen(blend(C.ACC, 0.60), 1.2))
         p.drawLine(QLineF(mx, my + 55, mx + mw, my + 45))
-        p.drawLine(QLineF(mx + 90, my, mx + 75, my + mh))
+        p.drawLine(QLineF(mx + 92, my, mx + 76, my + mh))
 
-        # Crosshair & pulse
-        blip_x, blip_y = mx + 95.0, my + 40.0
+        # Real-time pulsating GPS location crosshair
+        blip_x, blip_y = mx + 88.0, my + 44.0
         pulse = 0.5 + 0.5 * math.sin(self._tick * 0.15)
-        p.setPen(QPen(blend(C.WHITE, 0.90), 1.2))
-        p.drawLine(QLineF(blip_x - 7, blip_y, blip_x + 7, blip_y))
-        p.drawLine(QLineF(blip_x, blip_y - 7, blip_x, blip_y + 7))
+        p.setPen(QPen(blend(C.WHITE, 0.95), 1.2))
+        p.drawLine(QLineF(blip_x - 8, blip_y, blip_x + 8, blip_y))
+        p.drawLine(QLineF(blip_x, blip_y - 8, blip_x, blip_y + 8))
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(with_alpha(C.ACC, 0.50 * pulse)))
-        p.drawEllipse(QPointF(blip_x, blip_y), 4 + 3 * pulse, 4 + 3 * pulse)
+        p.setBrush(QBrush(with_alpha(C.ACC, 0.55 * pulse)))
+        p.drawEllipse(QPointF(blip_x, blip_y), 4.5 + 3.5 * pulse, 4.5 + 3.5 * pulse)
 
+        # Top coordinate badge
+        coords_txt = self._loc_info.get("coords_str", "15.5016° N, 73.8234° E")
         p.setFont(px_font(7, QFont.Weight.Medium, mono=True))
-        p.setPen(QPen(blend(C.TEXT_DIM, 0.75)))
-        p.drawText(QRectF(mx + 6, my + mh - 16, 70, 12), Qt.AlignmentFlag.AlignLeft, "HSR Layout")
+        p.setPen(QPen(blend(C.PRI_DIM, 0.85)))
+        p.drawText(QRectF(mx + 6, my + 4, mw - 12, 12), Qt.AlignmentFlag.AlignLeft, coords_txt)
+
+        # Bottom click prompt
+        p.setFont(px_font(6, QFont.Weight.Bold, mono=True, spacing=1.0))
+        p.setPen(QPen(blend(C.TEXT_DIM, 0.80)))
+        p.drawText(QRectF(mx + 6, my + mh - 14, mw - 12, 12), Qt.AlignmentFlag.AlignRight, "LIVE GPS · CLICK TO OPEN")
         p.restore()
 
-        # Label: BENGALURU, KARNATAKA
+        # Real location label beneath map box
+        loc_label = self._loc_info.get("label", "PANJIM, GOA")
         p.setFont(px_font(8, QFont.Weight.Bold, mono=True, spacing=1.2))
         p.setPen(QPen(blend(C.PRI, 0.95)))
         p.drawText(QRectF(mx - 20, my + mh + 4, mw + 20, 16),
                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                   "BENGALURU, KARNATAKA")
+                   loc_label)
 
         # state line: spaced capitals between two fading rules that pulse
         if self.muted:

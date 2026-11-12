@@ -75,7 +75,7 @@ class SetupOverlay(QWidget):
             w.setStyleSheet(f"color: {color}; background: transparent;")
             return w
 
-        layout.addWidget(_lbl("◈  INITIALISATION REQUIRED", 13, True))
+        layout.addWidget(_lbl("INITIALISATION REQUIRED", 13, True))
         layout.addWidget(_lbl("Configure J.A.R.V.I.S. before first boot.", 9, color=C.PRI_DIM))
         layout.addSpacing(6)
 
@@ -112,7 +112,7 @@ class SetupOverlay(QWidget):
 
         os_row = QHBoxLayout(); os_row.setSpacing(6)
         self._os_btns: dict[str, QPushButton] = {}
-        for key, label in [("windows","⊞  Windows"),("mac","  macOS"),("linux","🐧  Linux")]:
+        for key, label in [("windows", "Windows"), ("mac", "macOS"), ("linux", "Linux")]:
             btn = QPushButton(label)
             btn.setFont(hud_font(9, QFont.Weight.Bold))
             btn.setFixedHeight(32)
@@ -314,7 +314,7 @@ class CustomizeOverlay(QWidget):
                f"border: 1px solid {C.BORDER}; border-radius: 3px; padding: 4px 8px; }}"
                f"QLineEdit:focus {{ border: 1px solid {C.PRI}; }}")
 
-        lay.addWidget(_lbl("⚙  CUSTOMISE ASSISTANT", 12, True))
+        lay.addWidget(_lbl("CUSTOMISE ASSISTANT", 12, True))
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;")
         lay.addWidget(sep)
@@ -521,7 +521,7 @@ class PluginManagerOverlay(QWidget):
         lay.setContentsMargins(20, 16, 20, 16)
         lay.setSpacing(6)
 
-        hdr = QLabel("🧩  PLUGIN MANAGER")
+        hdr = QLabel("PLUGIN MANAGER")
         hdr.setFont(hud_font(12, QFont.Weight.Bold))
         hdr.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         lay.addWidget(hdr)
@@ -760,7 +760,7 @@ class AudioDeviceOverlay(_HudOverlay):
         lay.setContentsMargins(20, 16, 20, 16)
         lay.setSpacing(6)
 
-        hdr = QLabel("🎧  AUDIO DEVICES")
+        hdr = QLabel("AUDIO DEVICES")
         hdr.setFont(hud_font(12, QFont.Weight.Bold))
         hdr.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         lay.addWidget(hdr)
@@ -1168,7 +1168,7 @@ class MemoryOverlay(_HudOverlay):
 
         from memory.memory_manager import all_entries_for_ui
 
-        hdr = QLabel("🧠  WHAT JARVIS REMEMBERS")
+        hdr = QLabel("MEMORY LOG")
         hdr.setFont(hud_font(12, QFont.Weight.Bold))
         hdr.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         self._lay.addWidget(hdr)
@@ -1219,7 +1219,7 @@ class MemoryOverlay(_HudOverlay):
                 meta.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
                 line.addWidget(meta)
 
-                rm = QPushButton("✕")
+                rm = QPushButton("X")
                 rm.setFixedSize(20, 20)
                 rm.setFont(hud_font(8, QFont.Weight.Bold))
                 rm.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1322,11 +1322,11 @@ class ClipboardPanel(QWidget):
         lay.setSpacing(4)
 
         hdr = QHBoxLayout(); hdr.setSpacing(4)
-        icon_lbl = QLabel("◈  CLIPBOARD DETECTED")
+        icon_lbl = QLabel("CLIPBOARD DETECTED")
         icon_lbl.setFont(hud_font(7, QFont.Weight.Bold))
         icon_lbl.setStyleSheet(f"color: {C.ACC2}; background: transparent;")
         hdr.addWidget(icon_lbl); hdr.addStretch()
-        x_btn = QPushButton("✕")
+        x_btn = QPushButton("X")
         x_btn.setFixedSize(16, 16)
         x_btn.setFont(hud_font(8))
         x_btn.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; border: none;")
@@ -1422,7 +1422,7 @@ class PluginSettingsOverlay(QWidget):
         root.setContentsMargins(22, 16, 22, 16)
         root.setSpacing(8)
 
-        root.addWidget(self._lbl("⚙  PLUGIN SETTINGS", 12, True))
+        root.addWidget(self._lbl("PLUGIN SETTINGS", 12, True))
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;")
         root.addWidget(sep)
@@ -1678,7 +1678,7 @@ class RemoteKeyOverlay(QWidget):
             w.setWordWrap(True)
             return w
 
-        lay.addWidget(_lbl("◈  REMOTE ACCESS", 12, True))
+        lay.addWidget(_lbl("REMOTE ACCESS", 12, True))
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet(f"color: {C.BORDER}; margin: 1px 0;")
         lay.addWidget(sep)

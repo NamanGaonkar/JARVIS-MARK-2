@@ -233,13 +233,13 @@ class LogWidget(QTextEdit):
             QTimer.singleShot(20, self._next)
 
 _FILE_ICONS = {
-    "image":   ("🖼", "#00d4ff"), "video":   ("🎬", "#ff6b00"),
-    "audio":   ("🎵", "#cc44ff"), "pdf":     ("📄", "#ff4444"),
-    "word":    ("📝", "#4488ff"), "excel":   ("📊", "#44bb44"),
-    "code":    ("💻", "#ffcc00"), "archive": ("📦", "#ff8844"),
-    "pptx":    ("📊", "#ff6622"), "text":    ("📃", "#aaaaaa"),
-    "data":    ("🔧", "#88ddff"), "unknown": ("📎", "#888888"),
-    "folder":  ("📁", "#ffcc00"),
+    "image":   ("IMG", "#ffaa00"), "video":   ("VID", "#ff7700"),
+    "audio":   ("AUD", "#cc66ff"), "pdf":     ("PDF", "#ff4444"),
+    "word":    ("DOC", "#ffaa33"), "excel":   ("XLS", "#44bb44"),
+    "code":    ("SRC", "#ffcc00"), "archive": ("ZIP", "#ff8844"),
+    "pptx":    ("PPT", "#ff6622"), "text":    ("TXT", "#aaaaaa"),
+    "data":    ("DAT", "#88ddff"), "unknown": ("FILE", "#888888"),
+    "folder":  ("DIR", "#ffcc00"),
 }
 _EXT_TO_CAT = {
     **dict.fromkeys(["jpg","jpeg","png","gif","webp","bmp","tiff","svg","ico"], "image"),
@@ -363,8 +363,8 @@ class FileDropZone(QWidget):
             f"border: 1px solid {C.BORDER_B}; }}"
             f"QMenu::item {{ padding: 6px 18px; }}"
             f"QMenu::item:selected {{ background: {C.PRI_GHO}; }}")
-        pick_file = menu.addAction("📄  Choose a file…")
-        pick_dir = menu.addAction("📁  Choose a folder…  (for coding)")
+        pick_file = menu.addAction("Choose a file…")
+        pick_dir = menu.addAction("Choose a folder…  (for coding)")
         chosen = menu.exec(QCursor.pos())
         if chosen is pick_dir:
             path = QFileDialog.getExistingDirectory(
@@ -513,12 +513,12 @@ class _CameraPreview(QWidget):
         lay.setSpacing(4)
 
         hdr = QHBoxLayout()
-        title = QLabel("◈  VISUAL INPUT")
+        title = QLabel("VISUAL INPUT")
         title.setFont(hud_font(7, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         hdr.addWidget(title)
         hdr.addStretch()
-        close_btn = QPushButton("✕")
+        close_btn = QPushButton("X")
         close_btn.setFixedSize(16, 16)
         close_btn.setFont(hud_font(8))
         close_btn.setStyleSheet(

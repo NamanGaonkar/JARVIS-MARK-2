@@ -265,8 +265,17 @@ def _news(query: str) -> str:
     exactly what the briefing wants, so it goes first and Gemini is only touched
     when DDG comes back empty.
     """
-    gemini_query = f"latest news today: {query}" if query else "top world news today"
-    ddg_query    = query if query else "world news today"
+    if not query:
+        try:
+            from core.location import get_news_query_for_location
+            ddg_query = get_news_query_for_location()
+            gemini_query = f"top local Indian state and national news today: {ddg_query}"
+        except Exception:
+            ddg_query = "India news today"
+            gemini_query = "latest top news today India"
+    else:
+        gemini_query = f"latest news today: {query}"
+        ddg_query    = query
 
     def _ddg_attempt() -> str:
         return _format_news(ddg_query, _ddg_news(ddg_query, max_results=8))

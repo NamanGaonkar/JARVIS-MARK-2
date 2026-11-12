@@ -1,65 +1,65 @@
-# ⚡ JARVIS MARK 2 (JARVIS MARK II)
-### The Ultimate Autonomous Multimodal AI Assistant with Movie-Accurate Holographic HUD
+# JARVIS MARK 2
+### Autonomous Multimodal AI Assistant with Cinema Holographic HUD
 
 <p align="center">
   <img src="hud_preview.png" alt="JARVIS MARK 2 HUD" width="850" />
 </p>
 
-> **"Just A Rather Very Intelligent System — Protocol Mark II Online."**
+> **"Just A Rather Very Intelligent System — Protocol Mark II Online."**  
 > A real-time voice, vision, and system automation AI built to recreate the iconic Iron Man JARVIS laboratory experience right on your desktop.
 
 ---
 
-## 🌟 What is JARVIS MARK 2?
+## Overview
 
-**JARVIS MARK 2** is a personal AI system featuring an **Iron Man movie-accurate amber holographic HUD** and an autonomous digital brain. Powered by bidirectional real-time audio/vision streaming and an extensible multi-provider engine (Google Gemini Live, DeepSeek, Groq, Ollama, LM Studio), JARVIS can hear, speak, see, remember, execute tasks, browse the web, and operate your computer autonomously.
+**JARVIS MARK 2** is a personal AI system featuring an amber holographic HUD and an autonomous digital brain. Powered by bidirectional real-time audio/vision streaming and an extensible universal multi-provider engine, JARVIS can converse with natural emotional intelligence, see through cameras and screens, manage files and workspaces, execute code, schedule reminders, track real-time local Indian state news, and operate your computer autonomously.
 
 ---
 
-## 🎬 Movie-Accurate Holographic HUD
+## Holographic HUD Interface
 
-JARVIS MARK 2 features a redesigned visual interface matching Tony Stark's iconic workshop display:
+JARVIS MARK 2 features a visual interface designed after cinematic holographic workstations:
 
-* **3D Celestial Arc Reactor Gyroscope**: A glowing white-hot nuclear core with radiant amber corona and 3-axis gyroscopic orbital rings with segmented holographic tick dashes.
+* **3D Celestial Arc Reactor Gyroscope**: A glowing nuclear core with radiant amber corona and 3-axis gyroscopic orbital rings with segmented CAD tick dashes.
 * **Celestial Star Particle Swarm**: Over 450 depth-sorted 3D starlight motes orbiting in perspective space with dynamic shimmer and audio-reactive amplitude swell.
-* **Top-Right Digital Chronometer**: Monospaced amber digital clock (`HH:MM:SS`) and date (`DAY DD MON YYYY`) matching the cinematic aesthetic.
-* **Tactical GPS / Location HUD Widget**: Amber tactical vector map of **Bengaluru, Karnataka** (HSR Layout) with coordinate crosshairs and live radar ping.
-* **Floating Amber System Console**: Real-time terminal log stream floating on the deep-space void (`SYSTEM`, `LINK`, `USER`, `AI`).
-* **One-Touch Cinema Mode (`F10`)**: Toggle instantly between full workstation controls and pure, borderless fullscreen Movie HUD.
+* **Digital Chronometer**: Monospaced amber digital clock (`HH:MM:SS`) and date (`DAY DD MON YYYY`) rendered with high precision.
+* **Tactical GPS & Dynamic Map Widget**: Real location resolution via IP geolocation (displaying coordinates, city, and state), featuring interactive click-to-open map navigation in the browser.
+* **Floating Amber System Console**: Real-time terminal log stream floating on the pitch-black void (`SYSTEM`, `LINK`, `USER`, `AI`).
+* **One-Touch HUD Mode (`F10`)**: Toggle instantly between workstation controls and a clean, borderless HUD view.
 
 ---
 
-## 🚀 Key Features
+## Core Capabilities
 
 | Capability | Description |
 |---|---|
-| 🎙️ **Real-time Live Voice** | Ultra-low latency voice conversation via Gemini Live / WebSockets with native barge-in and audio interruption. |
-| 👁️ **Computer Vision & OCR** | Real-time screen analysis, active window inspection, and camera perception. |
-| 🌌 **3D Celestial Core** | Software-rendered 3D gyroscopic particle sphere — zero heavy GPU/OpenGL overhead. |
-| 🧠 **Multi-Engine Providers** | Connects to Gemini Live, DeepSeek, Groq, Ollama, OpenAI, Mistral, and local LLMs. |
-| 🧵 **Background Autonomous Agents** | Multi-step research and long-running autonomous workflows that run quietly while you continue conversing. |
-| 🖥️ **Total Desktop Automation** | Launch apps, control media, manage files, read PDFs/Word/Excel, and control browsers via Playwright. |
-| 📱 **Encrypted Remote Dashboard** | Secure HTTPS + AES-256 mobile web dashboard on port `8001` to talk to JARVIS from your phone. |
-| 🛡️ **Safety & Confirmation Gate** | Irreversible file operations require spoken or UI confirmation before executing. |
-| 🕒 **Routine Engine & Quiet Hours** | Schedule daily briefings, periodic monitors, and quiet hours directly by voice. |
+| **Real-time Live Voice** | Ultra-low latency voice conversation via Gemini Live and WebSockets with native barge-in and audio interruption. |
+| **Vision & Image Understanding** | Real-time screen analysis, active window inspection, optical OCR, and image comprehension. |
+| **Universal Model Support** | Native integration with DeepSeek, Claude (Anthropic), OpenAI GPT-4o, Groq, Ollama, LM Studio, Mistral, xAI, and Gemini. |
+| **Emotional Intelligence** | Authentic emotional depth, loyalty, warmth, understated dry British wit, and proactive empathy. |
+| **Complete Workspace Automation** | Create, locate, inspect, modify, and delete files or directories; automate repetitive filesystem workflows. |
+| **Code Execution & Development Agent** | Autonomous coding agent (`dev_agent`) capable of generating, running, testing, and debugging software projects. |
+| **Reminders & Calendar Routines** | Native system schedule automation, reminders, daily briefings, and quiet hours. |
+| **Real-Time Local State News** | Context-aware news retrieval tailored to your detected Indian state and city location. |
+| **Encrypted Remote Dashboard** | Secure HTTPS and AES-256 mobile web dashboard on port `8001` to interface with JARVIS remotely. |
 
 ---
 
-## ⌨️ Quick Controls & Shortcuts
+## Keyboard Controls & Shortcuts
 
 | Key | Action |
 |---|---|
-| <kbd>F10</kbd> | **Toggle Movie HUD Mode** (Hides panels for clean cinematic immersion) |
+| <kbd>F10</kbd> | **Toggle HUD Mode** (Hides side panels for clean holographic view) |
 | <kbd>F11</kbd> | **Toggle Fullscreen** |
 | <kbd>F4</kbd> | **Mute / Unmute Microphone** |
-| <kbd>Escape</kbd> | **Interrupt JARVIS** (Stops speech immediately) |
+| <kbd>Escape</kbd> | **Interrupt JARVIS** (Halts speech immediately) |
 
 ---
 
-## 🛠️ Quick Start Guide
+## Quick Start Guide
 
 ### 1. Requirements
-* **Python**: 3.11 or 3.12 recommended
+* **Python**: 3.11 or 3.12
 * **OS**: Windows 10/11, macOS, or Linux
 
 ### 2. Setup
@@ -68,31 +68,32 @@ Clone the repository and install dependencies:
 
 ```bash
 # Clone
-git clone https://github.com/FatihMakes/Mark-LVII.git
-cd Mark-LVII
+git clone <your-repository-url>
+cd VISION
 
-# Set up virtual environment and install packages
+# Create and activate virtual environment
 python -m venv .venv
-.venv\Scripts\activate      # On Windows
-# source .venv/bin/activate  # On macOS/Linux
+.venv\Scripts\activate      # Windows
+# source .venv/bin/activate  # macOS / Linux
 
+# Install dependencies
 pip install -r requirements.txt
 ```
 
 ### 3. Launching JARVIS MARK 2
 
-On Windows, simply run:
+On Windows:
 ```bat
 run_jarvis.bat
 ```
 
-Or via command line:
+Or run via command line:
 ```bash
 python main.py
 ```
 
-### 4. API Keys Setup
-When launching for the first time, click the **⚙ (Gear)** icon in the header or edit `config/api_keys.json` to insert your Gemini API Key or preferred provider keys:
+### 4. Configuration & API Keys
+On first launch, open the settings drawer or configure `config/api_keys.json` with your API keys:
 
 ```json
 {
@@ -103,33 +104,35 @@ When launching for the first time, click the **⚙ (Gear)** icon in the header o
 }
 ```
 
+For DeepSeek, Claude, OpenAI, or local models (Ollama/LM Studio), configure your credentials through the **Engine & Providers** panel.
+
 ---
 
-## 🏗️ Architecture
+## System Architecture
 
 ```
 VISION (JARVIS MARK 2)
- ├── actions/          # Self-describing modular automation tools & monitors
- ├── agents/           # Markdown-defined autonomous background agent workflows
- ├── config/           # API keys, persistent settings, and application icons
- ├── core/             # Gemini Live client, action loader, TLS, wake word
+ ├── actions/          # Automation tools (files, coding, reminders, web search, system)
+ ├── agents/           # Autonomous background agent workflows
+ ├── config/           # API keys, persistent settings, and location cache
+ ├── core/             # Gemini Live client, action loader, location resolver, prompts
  ├── dashboard/        # Encrypted mobile web dashboard (FastAPI + HTTPS + AES)
  ├── gui/              # PyQt6 HUD interface
  │    ├── reactor.py   # 3D Celestial Gyroscope & Particle Arc Reactor
- │    ├── hud.py       # Cinematic HUD canvas, clock, log stream, tactical map
- │    ├── window.py    # MainWindow, panels, drawer systems, Movie Mode toggle
- │    └── theme.py     # Palette definition, amber/gold Iron Man styling
+ │    ├── hud.py       # Holographic HUD canvas, chronometer, log stream, tactical map
+ │    ├── window.py    # MainWindow, panels, drawer systems, HUD mode toggle
+ │    └── theme.py     # Palette definitions, amber Iron Man styling
  ├── memory/           # Persistent user memory, vector history, config manager
  ├── plugins/          # Extensible plugin system (Tuya, Spotify, WhatsApp, etc.)
- ├── providers/        # Fallback LLM engines (DeepSeek, Groq, Ollama, OpenAI)
+ ├── providers/        # Multi-provider LLM engines (DeepSeek, Claude, Groq, Ollama, OpenAI)
  ├── main.py           # Core initialization and background loop orchestration
- └── run_jarvis.bat    # Quick one-click launcher for Windows
+ └── run_jarvis.bat    # Windows launcher script
 ```
 
 ---
 
-## 📄 License & Attribution
+## License & Attribution
 
-* Original framework and architecture based on **Mark LVII** by [FatihMakes](https://github.com/FatihMakes).
-* Customized, upgraded, and themed as **JARVIS MARK 2** featuring the amber cinematic movie HUD.
+* Original framework and architecture based on Mark LVII by [FatihMakes](https://github.com/FatihMakes).
+* Upgraded and themed as **JARVIS MARK 2** featuring the holographic HUD, universal LLM provider pipeline, and automated task execution.
 * Distributed under the MIT License.
