@@ -647,6 +647,7 @@ class JarvisLive:
         self._out_latency          = 0.20    # seconds, replaced with the real value
         self._tail_until           = 0.0     # monotonic time the echo tail expires
         self._barge_in_streak      = 0       # consecutive frames of sustained user voice for anti-noise barge-in
+        self._mic_preroll          = []      # ring buffer of recent PCM blocks for instant barge-in capture
         # Wall-clock time at which the audio written next will begin to sound.
         # The mouth is scheduled against this, never against "now": batches are
         # handed to the device far faster than they play, so "now" ran the lips
@@ -1351,9 +1352,12 @@ class JarvisLive:
                     break
 
         if speaking or drained > 0:
+            with self._speaking_lock:
+                self._is_speaking = False
             self._interrupted = True
             print(f"[JARVIS] ✋ Interrupted — {drained} audio chunks discarded")
             self.set_speaking(False)
+            self._tail_until = 0.0  # Immediately clear tail so user speech passes without suppression
             self._visemes.reset()
             self._play_cursor = 0.0
             if self._turn_done_event:
@@ -1901,27 +1905,51 @@ class JarvisLive:
                 if det is not None:
                     det.feed(indata)
                 return
+
+            raw_bytes = indata.tobytes()
+            preroll = getattr(self, "_mic_preroll", None)
+            if preroll is not None:
+                preroll.append(raw_bytes)
+                if len(preroll) > 4:
+                    preroll.pop(0)
+
             with self._speaking_lock:
                 jarvis_speaking = self._is_speaking
 
-            # ── Smart Anti-Noise Barge-in ────────────────────────────────────
-            # While JARVIS is actively speaking, listen for genuine user speech to interrupt.
-            # Avoid triggering on ambient noise, fan hum, keyboard clatter, or coughs:
-            # 1. Energy threshold: Speech level must exceed conversational threshold (lvl >= 0.12).
-            # 2. Echo subtraction: Must not match JARVIS's own speaker output.
-            # 3. Sustained vocal gating: Requires >= 4 consecutive speech frames (~256 ms),
-            #    which filters out transient impulse sounds like keystrokes or mouse clicks.
+            # ── Real-Time Conversational Barge-in ─────────────────────────────
+            # While JARVIS is speaking, detect when the user speaks naturally to interrupt.
+            # - Conversational level threshold (lvl >= 0.04)
+            # - Echo subtraction (must not match assistant's speaker output)
+            # - 2 consecutive frames (~128 ms): filters out transient clicks/taps
             if jarvis_speaking:
                 try:
                     lvl = _pcm_level(indata)
-                    if lvl >= 0.12 and self._echo.is_user_speech(indata, SEND_SAMPLE_RATE, lvl):
+                    if lvl >= 0.04 and self._echo.is_user_speech(indata, SEND_SAMPLE_RATE, lvl):
                         self._barge_in_streak = getattr(self, "_barge_in_streak", 0) + 1
-                        if self._barge_in_streak >= 4:
+                        if self._barge_in_streak >= 2:
                             self._barge_in_streak = 0
-                            print("[JARVIS] 🎙️ Sustained user speech detected — interrupting")
+                            print("[JARVIS] 🎙️ Conversational barge-in detected — interrupting")
                             loop.call_soon_threadsafe(self.interrupt)
+                            with self._speaking_lock:
+                                self._is_speaking = False
+
+                            # Stream pre-roll buffer + current frame immediately so Gemini
+                            # receives the full user question without losing opening syllables!
+                            if not self.ui.muted and not self._phone_active:
+                                if preroll:
+                                    for chunk in preroll:
+                                        loop.call_soon_threadsafe(
+                                            self.out_queue.put_nowait,
+                                            {"data": chunk, "mime_type": "audio/pcm;rate=16000"}
+                                        )
+                                    preroll.clear()
+                                try:
+                                    self.ui.set_audio_level(lvl)
+                                except Exception:
+                                    pass
+                            return
                     else:
-                        self._barge_in_streak = 0
+                        self._barge_in_streak = max(0, getattr(self, "_barge_in_streak", 0) - 1)
                 except Exception:
                     self._barge_in_streak = 0
                 return
@@ -2099,6 +2127,11 @@ class JarvisLive:
 
                     if response.server_content:
                         sc = response.server_content
+
+                        # Server-side barge-in from Gemini Live
+                        if getattr(sc, "interrupted", False):
+                            print("[JARVIS] ⚡ Gemini Live detected barge-in interruption")
+                            self.interrupt()
 
                         if sc.output_transcription and sc.output_transcription.text:
                             txt = _clean_transcript(sc.output_transcription.text)

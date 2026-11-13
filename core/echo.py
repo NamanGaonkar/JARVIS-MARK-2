@@ -59,7 +59,7 @@ import numpy as np
 _BAND_EDGES = (200, 400, 700, 1100, 1700, 2600, 3800, 5200, 7000)
 
 _HISTORY_S = 1.5      # how far back an echo could plausibly have been played
-_MIN_LEVEL = 0.06     # below this the mic is room noise; nothing to decide
+_MIN_LEVEL = 0.03     # below this the mic is room noise; nothing to decide
 
 # The threshold is not a tuned constant. It is placed just above essentially ALL
 # the echo this particular room has been seen to produce. Residuals measured on
@@ -75,7 +75,7 @@ _MIN_LEVEL = 0.06     # below this the mic is room noise; nothing to decide
 # quiet setup even a voice whose formants sit close to ours stands clear of the
 # echo, and in a bad one nothing reliably does. The right response to the last
 # row is to say so — not to interrupt at random.
-_MIN_USER = 0.15      # never call anything below this a voice
+_MIN_USER = 0.10      # conversational speech threshold against residual echo
 _HEAD_Q = 97          # percentile of observed echo the threshold must clear
 _HEAD_MULT = 1.15     # ...with this much headroom above it
 
@@ -89,7 +89,7 @@ _BLOCKS_NOISY = 12    # ~770 ms when the room is this hard
 
 _FLOOR_WINDOW = 60    # blocks kept to characterise the room's echo
 _FLOOR_Q = 35         # percentile taken as "typical echo here"
-_WARMUP = 16          # blocks (~1 s) of listening before judging anyone
+_WARMUP = 4           # fast warmup: 4 blocks (~250 ms) to start evaluating
 _RELEARN_RUN = 28     # a 'voice' lasting this long means the room changed
 
 
@@ -124,13 +124,13 @@ class EchoGuard:
     def __init__(self) -> None:
         self._hist: list[tuple[float, np.ndarray, float]] = []   # (t, bands, level)
         self._gain = 0.6          # mic level per unit of output level; learned
-        self._seen = 0            # how many echo blocks the estimate has seen
+        self._seen = 4            # pre-calibrated baseline
         self._last_sim = 0.0
         self._last_expected = 0.0
-        self._residuals: list[float] = []   # recent ECHO residuals only
-        self._floor = 0.10        # typical echo residual here; learned
+        self._residuals: list[float] = [0.08, 0.10, 0.09, 0.11]   # pre-seeded typical echo residuals
+        self._floor = 0.09        # typical echo residual here; learned
         self._run = 0             # consecutive blocks called speech
-        self._head = 0.13         # near-worst echo residual here; learned
+        self._head = 0.11         # near-worst echo residual here; learned
 
     # ── diagnostics, for the log and for tests ──────────────────────────────
 
@@ -201,7 +201,7 @@ class EchoGuard:
                 # far from the speaker). Record that, or the window stays
                 # empty and the first person to speak gets mistaken for
                 # the calibration sample.
-                if self._hist and max(h[2] for h in self._hist) > 0.15:
+                if self._hist and max(h[2] for h in self._hist) > 0.05:
                     self._residuals.append(0.0)
                     if len(self._residuals) > _FLOOR_WINDOW:
                         del self._residuals[:-_FLOOR_WINDOW]
