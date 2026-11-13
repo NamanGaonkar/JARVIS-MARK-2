@@ -141,7 +141,7 @@ def save_assistant_config(assistant_name: str, user_name: str) -> None:
     _write_config(data)
 
 
-APP_VERSION = "2.0.8"
+APP_VERSION = "2.0.9"
 
 
 @_locked
