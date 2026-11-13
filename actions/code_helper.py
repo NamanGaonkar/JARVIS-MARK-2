@@ -27,13 +27,22 @@ def _get_api_key() -> str:
 
 
 def _get_gemini(tier: str = gemini.SMART):
-    """Writing and fixing code is the reasoning tier; a 60s deadline because a
-    whole file can come back."""
+    """Writing and fixing code is the reasoning tier; routes to configured coding provider if set,
+    with Gemini SMART fallback ladder."""
+    provider = ""
+    try:
+        from memory.config_manager import get_coding_provider
+        provider = get_coding_provider()
+    except Exception:
+        pass
+
     class _W:
         def generate_content(self, contents):
-            resp = gemini.call(contents, tier=tier, timeout_ms=60000)
+            resp = gemini.call(contents, tier=tier,
+                               timeout_ms=180000 if provider else 60000,
+                               provider=provider)
             if resp is None:
-                raise RuntimeError("every Gemini model on the ladder failed")
+                raise RuntimeError("every model on the ladder failed")
             return resp
 
     return _W()

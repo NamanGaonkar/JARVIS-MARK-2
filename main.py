@@ -639,6 +639,7 @@ class JarvisLive:
         # guessed; see _play_audio.
         self._out_latency          = 0.20    # seconds, replaced with the real value
         self._tail_until           = 0.0     # monotonic time the echo tail expires
+        self._barge_in_streak      = 0       # consecutive frames of sustained user voice for anti-noise barge-in
         # Wall-clock time at which the audio written next will begin to sound.
         # The mouth is scheduled against this, never against "now": batches are
         # handed to the device far faster than they play, so "now" ran the lips
@@ -1540,6 +1541,13 @@ class JarvisLive:
             parts.append(hw_ctx)
         if mem_str:
             parts.append(mem_str)
+        try:
+            from memory.config_manager import check_and_update_version_upgrade
+            upgrade_ctx = check_and_update_version_upgrade()
+            if upgrade_ctx:
+                parts.append(upgrade_ctx)
+        except Exception as e:
+            print(f"[JARVIS] Upgrade check: {e}")
         parts.append(sys_prompt)
 
         cfg = dict(
@@ -1889,18 +1897,29 @@ class JarvisLive:
             with self._speaking_lock:
                 jarvis_speaking = self._is_speaking
 
-            # ── Barge-in ─────────────────────────────────────────────────────
-            # While JARVIS talks the mic is not streamed, but it is still worth
-            # listening to locally: if the user starts speaking, cut the answer
-            # short the way a person would stop when interrupted.
-            #
-            # The whole difficulty is echo — on speakers the mic hears JARVIS.
-            # So the test is not "is the mic loud" but "is the mic louder than
-            # the echo of what we are playing right now", sustained long enough
-            # that a cough or a keystroke cannot trigger it.
+            # ── Smart Anti-Noise Barge-in ────────────────────────────────────
+            # While JARVIS is actively speaking, listen for genuine user speech to interrupt.
+            # Avoid triggering on ambient noise, fan hum, keyboard clatter, or coughs:
+            # 1. Energy threshold: Speech level must exceed conversational threshold (lvl >= 0.12).
+            # 2. Echo subtraction: Must not match JARVIS's own speaker output.
+            # 3. Sustained vocal gating: Requires >= 4 consecutive speech frames (~256 ms),
+            #    which filters out transient impulse sounds like keystrokes or mouse clicks.
             if jarvis_speaking:
-                # Manual interrupt only (Escape key or stop button) — audio barge-in disabled
+                try:
+                    lvl = _pcm_level(indata)
+                    if lvl >= 0.12 and self._echo.is_user_speech(indata, SEND_SAMPLE_RATE, lvl):
+                        self._barge_in_streak = getattr(self, "_barge_in_streak", 0) + 1
+                        if self._barge_in_streak >= 4:
+                            self._barge_in_streak = 0
+                            print("[JARVIS] 🎙️ Sustained user speech detected — interrupting")
+                            loop.call_soon_threadsafe(self.interrupt)
+                    else:
+                        self._barge_in_streak = 0
+                except Exception:
+                    self._barge_in_streak = 0
                 return
+            else:
+                self._barge_in_streak = 0
 
             # ── Echo tail ────────────────────────────────────────────────────
             # The speaking flag has dropped but the speakers have not finished.

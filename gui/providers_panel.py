@@ -894,10 +894,9 @@ class ProvidersOverlay(_HudOverlay):
 
         self._coding_combo = self._service_combo(
             "llm", ("Same as background requests", ""), fmt)
-        # The sponsor's model sits directly under the default, where it is the
-        # first real choice anybody sees — not buried twelfth in the list.
+        # Prioritize DeepSeek at the top of the provider list for coding
         for i in range(self._coding_combo.count()):
-            if (self._coding_combo.itemData(i) or "").endswith("@minimax"):
+            if (self._coding_combo.itemData(i) or "").endswith("@deepseek"):
                 text = self._coding_combo.itemText(i)
                 data = self._coding_combo.itemData(i)
                 self._coding_combo.removeItem(i)

@@ -141,11 +141,35 @@ def save_assistant_config(assistant_name: str, user_name: str) -> None:
     _write_config(data)
 
 
+APP_VERSION = "2.0.8"
+
+
+@_locked
+def check_and_update_version_upgrade() -> str | None:
+    """Detect if this is the first boot after an application upgrade.
+    Returns the update notification prompt if newly upgraded, or None otherwise.
+    Immediately updates stored installed_version so it only triggers once per upgrade."""
+    ensure_config_dir()
+    data = _read_for_write()
+    installed = data.get("installed_version", "")
+    if installed != APP_VERSION:
+        data["installed_version"] = APP_VERSION
+        _write_config(data)
+        return (
+            f"[SYSTEM UPDATE NOTICE - VERSION {APP_VERSION}]\n"
+            f"JARVIS has just been upgraded to Mark II Version {APP_VERSION}. "
+            f"Key upgrades applied: decoupled model-agnostic coding engine, deep vocal resonance profiles, "
+            f"smart sustained voice interruption (anti-noise barge-in), and expanded persistent memory retention. "
+            f"In your very first turn or response this session, acknowledge this upgrade warmly and smoothly "
+            f"to the user (e.g. 'Systems upgraded and online, sir. Running Mark II Version {APP_VERSION}. How may I serve you today?')."
+        )
+    return None
+
+
 # ── Assistant voice ──────────────────────────────────────────────────────────
-# Gemini Live prebuilt voices. Names are proper nouns — identical in every
-# language, so this list is safe to show verbatim in any locale.
-AVAILABLE_VOICES = ["Charon", "Puck", "Kore", "Fenrir", "Aoede"]
-DEFAULT_VOICE    = "Charon"
+# Gemini Live prebuilt voices. Fenrir and Charon provide deep, resonant, authoritative tones.
+AVAILABLE_VOICES = ["Fenrir", "Charon", "Puck", "Kore", "Aoede"]
+DEFAULT_VOICE    = "Fenrir"
 
 
 def get_voice() -> str:

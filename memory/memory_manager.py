@@ -15,34 +15,22 @@ def get_base_dir() -> Path:
 BASE_DIR         = get_base_dir()
 MEMORY_PATH      = BASE_DIR / "memory" / "long_term.json"
 _lock            = Lock()
-MAX_VALUE_LENGTH = 380
+MAX_VALUE_LENGTH = 1000
 
 # ── Why there are two very different numbers here ────────────────────────────
 #
-# There used to be one: MEMORY_MAX_CHARS = 2200, applied to the whole store. It
-# was a *storage* limit, and it existed only because the entire memory was
-# pasted into the system prompt on every connect — so growing the memory grew
-# every single request. When it filled, _trim_to_limit() deleted the oldest
-# entries and printed one line to a console nobody reads. A memory described as
-# "deeply remembers projects, preferences and personal context" was in practice
-# two pages long, and quietly forgot your sister's name after a few weeks.
+# Storage and prompt budget are separate concerns.
+# We retain high fidelity with deep prompt memory injection for Gemini Live:
 #
-# Storage and prompt budget are now separate concerns:
-#
-#   MEMORY_MAX_CHARS  — a runaway guard, not a feature limit. Nothing normal
-#                       reaches it; a bug writing in a loop does.
+#   MEMORY_MAX_CHARS  — a runaway guard, not a feature limit.
 #   PROMPT_CORE_CHARS — what actually rides in the system prompt every session.
-#                       Smaller than the old whole-memory dump, so sessions
-#                       start *faster* than before, not slower.
+#   PROMPT_INDEX_CHARS — indexed overflow for instant recall.
 #
-# Everything above the core stays on disk and is fetched on demand by the
-# recall_memory tool — see search_memory() and format_memory_for_prompt().
-MEMORY_MAX_CHARS  = 200_000
-PROMPT_CORE_CHARS = 900
-PROMPT_INDEX_CHARS = 420
-# Most entries any one category may contribute to the core block, so a person
-# with forty stored preferences still gets their sister into the prompt.
-PROMPT_MAX_PER_CATEGORY = 6
+MEMORY_MAX_CHARS  = 500_000
+PROMPT_CORE_CHARS = 8_000
+PROMPT_INDEX_CHARS = 4_000
+# Most entries any one category may contribute to the core block
+PROMPT_MAX_PER_CATEGORY = 30
 
 def _empty_memory() -> dict:
     return {

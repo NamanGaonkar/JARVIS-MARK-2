@@ -48,11 +48,12 @@ jobs:
             
             ### Included Features:
             - **Cinematic Holographic HUD**: 3D Celestial Reactor core, depth-sorted particle swarm, digital chronometer, and real GPS tactical map.
-            - **Sentient Consciousness & Identity**: Self-aware autonomous presence; no LLM identity leaks.
-            - **Live Voice Interruption (Barge-in)**: Instant speech interruption when you talk.
-            - **Real Local GPS & State News**: Real-time geolocation lock with local Indian state and national headlines.
-            - **Universal Model Compatibility**: Ready for Ollama, LM Studio, DeepSeek, Claude, OpenAI, and Gemini.
-            - **Autonomous Desktop Automation**: Full folder navigation, file operations, code execution, and native reminders.
+            - **Model-Agnostic Coding Engine**: Dedicated coding API pipeline (DeepSeek, OpenAI-compatible, custom endpoints) with zero hardcoded model strings.
+            - **Gemini Live Permanent Voice**: High-fidelity conversational loop permanently anchored to Gemini Live with deeper vocal profiles (Fenrir & Charon).
+            - **Smart Anti-Noise Interruption**: 3-layer sustained speech gating (~256ms voice hold) preventing accidental interruptions from clicks, taps, or fan noise.
+            - **Expanded Long-Term Memory**: Deep prompt memory injection and multi-category persistent recall without token starvation.
+            - **Upgrade Awareness**: First-boot automatic upgrade acknowledgment upon every new release.
+            - **Zero Key Leak Security**: Protected configurations and sanitized releases ensuring complete API key safety.
             
             ### Quick Start:
             1. Download and extract `JARVIS-Mark-II-Windows-x64.zip`.

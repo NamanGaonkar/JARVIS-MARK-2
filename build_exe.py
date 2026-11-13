@@ -73,6 +73,11 @@ def build():
 
     res = subprocess.run(cmd)
     if res.returncode == 0:
+        # Guarantee zero personal API key leakage into release distributions
+        dist_config_keys = BASE_DIR / "dist" / "JARVIS-Mark-II" / "config" / "api_keys.json"
+        if dist_config_keys.exists():
+            dist_config_keys.unlink()
+            print("[*] Security check: Removed private api_keys.json from dist bundle.")
         print("\n[+] Build successful! Output located in dist/JARVIS-Mark-II/")
     else:
         print(f"\n[-] Build failed with exit code {res.returncode}")
