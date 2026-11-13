@@ -23,6 +23,13 @@ if _platform.system() == "Windows":
 # down on startup. Reconfiguring to UTF-8 with a replacement fallback costs
 # nothing and makes the app launch the same way in every locale.
 import sys as _sys
+import io as _io
+
+# Under pythonw.exe, stdout and stderr are None, which breaks logging and uvicorn formatters.
+if _sys.stdout is None:
+    _sys.stdout = _io.StringIO()
+if _sys.stderr is None:
+    _sys.stderr = _io.StringIO()
 
 for _stream in ("stdout", "stderr"):
     try:
@@ -30,7 +37,7 @@ for _stream in ("stdout", "stderr"):
         if _s is not None and hasattr(_s, "reconfigure"):
             _s.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
-        pass          # pythonw / redirected pipes / anything exotic — never fatal
+        pass          # redirected pipes / anything exotic — never fatal
 
 # ── HTTPS trusts the system's roots AND certifi's ────────────────────────────
 # A Windows store that never fetched a root failed every urllib call to that
