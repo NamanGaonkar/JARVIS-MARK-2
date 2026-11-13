@@ -1718,6 +1718,8 @@ class MainWindow(QMainWindow):
                 head += f"\n{t['error']}"
             lines = [f"· {e['text']}" for e in (t.get("events") or [])[-14:]
                      if e.get("kind") in ("progress", "tool", "note", "state", "finding")]
+            if t["status"] in ("running", "queued", "waiting_quota", "scheduled"):
+                lines.append("\n[Tip: Right-click this task row to instantly Cancel or Delete it.]")
             body = head + "\n\n" + "\n".join(lines)
         self._show_content("BACKGROUND TASK", body[:4000])
 

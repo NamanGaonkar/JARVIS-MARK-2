@@ -80,8 +80,35 @@ def background_tasks(parameters: dict, player=None) -> str:
         rows = [_row(t) for t in eng.list(10)]
         return "\n".join(rows) if rows else "No background tasks yet."
 
+    if action in ("cancel", "stop", "abort", "kill"):
+        active_tasks = [t for t in tasks if t["status"] in ACTIVE]
+        if not active_tasks and not (tid and eng.get(tid)):
+            return outcome.failed("background_tasks", "there are no active background tasks running")
+        cancelled_ids = []
+        if tid and tid not in ("all", "*"):
+            eng.cancel(tid)
+            cancelled_ids.append(tid)
+        else:
+            for t in active_tasks:
+                eng.cancel(t["id"])
+                cancelled_ids.append(t["id"])
+        if player:
+            player.write_log(f"[Tasks] Stopped background tasks: {len(cancelled_ids)}")
+            player.refresh_tasks()
+        return outcome.done("background_tasks", cancelled_tasks=cancelled_ids, count=len(cancelled_ids))
+
+    if action == "delete":
+        if tid and tid not in ("all", "*"):
+            eng.delete(tid)
+        else:
+            for t in tasks:
+                eng.delete(t["id"])
+        if player:
+            player.write_log(f"[Tasks] Purged background task records.")
+            player.refresh_tasks()
+        return outcome.done("background_tasks", deleted=True)
+
     tid = str(a.get("task_id") or "").strip()
-    tasks = eng.list(50)
     if tid:
         task = eng.get(tid)
     else:

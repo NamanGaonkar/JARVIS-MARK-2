@@ -108,3 +108,4 @@ def _notify(event: str, task: dict | None, text: str) -> None:
         _call("write_log", f"SYS: Background task waiting for a model (quota) — {title}")
     elif event == "cancelled":
         _call("write_log", f"SYS: Background task cancelled — {title}")
+    _call("refresh_tasks")

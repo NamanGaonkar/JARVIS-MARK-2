@@ -239,6 +239,9 @@ class TaskEngine:
             flags = self._flags.get(tid)
             if flags is not None:                   # running now
                 flags["finish" if finish else "cancel"] = True
+                if not finish:
+                    self._finish(tid, "cancelled")
+                    self._wake.set()
                 return True
         if finish and (self.store.load_turns(tid) or (t.get("research") or {}).get("plan")):
             # It has work to write up but is not running: let it run one last,
@@ -247,7 +250,34 @@ class TaskEngine:
             self._wake.set()
             return True
         self._finish(tid, "cancelled")
+        self._wake.set()
         return True
+
+    def delete(self, tid: str) -> bool:
+        """Cancel and purge a task completely from disk and memory."""
+        try:
+            self.cancel(tid)
+        except Exception:
+            pass
+        try:
+            import shutil
+            p = self.store._path(tid)
+            if p.exists():
+                p.unlink(missing_ok=True)
+            wdir = self.store.workdir(tid)
+            if wdir.exists():
+                shutil.rmtree(wdir, ignore_errors=True)
+            for tf in self.store.root.glob(f"{tid}*.turns.json"):
+                try:
+                    tf.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            with self.store._lock:
+                self.store._tasks.pop(tid, None)
+            self._wake.set()
+            return True
+        except Exception:
+            return False
 
     def steer(self, tid: str, note: str) -> bool:
         note = " ".join(str(note or "").split())

@@ -1169,12 +1169,35 @@ class RoutineRow(QWidget):
 
     def mousePressEvent(self, e):
         r = self._routine
-        if not r or e.button() != Qt.MouseButton.LeftButton:
+        if not r:
             return
-        if e.position().x() >= self.width() - self.SWITCH_W - 6:
-            self.toggled.emit(r["id"], not r.get("enabled"))
-        else:
-            self.clicked.emit(r["id"])
+        if e.button() == Qt.MouseButton.LeftButton:
+            if e.position().x() >= self.width() - self.SWITCH_W - 6:
+                self.toggled.emit(r["id"], not r.get("enabled"))
+            else:
+                self.clicked.emit(r["id"])
+        elif e.button() == Qt.MouseButton.RightButton:
+            menu = QMenu(self)
+            menu.setStyleSheet(f"""
+                QMenu {{
+                    background: {C.PANEL}; color: {C.WHITE};
+                    border: 1px solid {C.BORDER}; padding: 4px;
+                }}
+                QMenu::item:selected {{ background: {C.PRI_DIM}; color: {C.WHITE}; }}
+            """)
+            act_remove = menu.addAction("Remove Routine")
+            chosen = menu.exec(e.globalPosition().toPoint())
+            if chosen == act_remove:
+                try:
+                    from core.routines import desktop
+                    eng = desktop.engine()
+                    if eng:
+                        eng.remove(r["id"])
+                except Exception:
+                    pass
+                w = self.window()
+                if hasattr(w, "_refresh_tasks"):
+                    w._refresh_tasks()
 
     def enterEvent(self, e):
         super().enterEvent(e)
@@ -1240,8 +1263,45 @@ class TaskRow(QWidget):
         self.update()
 
     def mousePressEvent(self, e):
-        if self._task and e.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(self._task["id"])
+        if not self._task:
+            return
+        tid = self._task["id"]
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(tid)
+        elif e.button() == Qt.MouseButton.RightButton:
+            menu = QMenu(self)
+            menu.setStyleSheet(f"""
+                QMenu {{
+                    background: {C.PANEL}; color: {C.WHITE};
+                    border: 1px solid {C.BORDER}; padding: 4px;
+                }}
+                QMenu::item:selected {{ background: {C.PRI_DIM}; color: {C.WHITE}; }}
+            """)
+            act_stop = menu.addAction("Cancel / Stop Task")
+            act_del = menu.addAction("Delete Record")
+            chosen = menu.exec(e.globalPosition().toPoint())
+            if chosen == act_stop:
+                try:
+                    from core.tasks import desktop
+                    eng = desktop.engine()
+                    if eng:
+                        eng.cancel(tid)
+                except Exception:
+                    pass
+                w = self.window()
+                if hasattr(w, "_refresh_tasks"):
+                    w._refresh_tasks()
+            elif chosen == act_del:
+                try:
+                    from core.tasks import desktop
+                    eng = desktop.engine()
+                    if eng:
+                        eng.delete(tid)
+                except Exception:
+                    pass
+                w = self.window()
+                if hasattr(w, "_refresh_tasks"):
+                    w._refresh_tasks()
 
     def enterEvent(self, e):
         super().enterEvent(e)
