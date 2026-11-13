@@ -1072,7 +1072,9 @@ class MainWindow(QMainWindow):
         desktop = self._get_desktop_dir()
 
         # Arc-reactor icon (.ico — also exported as .png for Linux/macOS)
-        ico_path = Path(__file__).resolve().parent.parent / "config" / "jarvis.ico"
+        ico_path = Path(__file__).resolve().parent.parent / "config" / "jarvis_amber.ico"
+        if not ico_path.exists():
+            ico_path = Path(__file__).resolve().parent.parent / "config" / "jarvis.ico"
         if not ico_path.exists():
             self._build_jarvis_icon(ico_path)
 
@@ -1083,10 +1085,12 @@ class MainWindow(QMainWindow):
             if _os == "Windows":
                 pythonw  = python.parent / "pythonw.exe"
                 target   = str(pythonw if pythonw.exists() else python)
-                lnk      = str(desktop / "J.A.R.V.I.S.lnk")
-                icon_loc = str(ico_path) if ico_path.exists() else f"{target},0"
-                self._create_lnk_windows(lnk, target, str(script),
-                                         str(script.parent), icon_loc)
+                icon_loc = f"{ico_path},0" if ico_path.exists() else f"{target},0"
+                # Update all desktop shortcuts
+                for lnk_name in ("JARVIS MARK 2.lnk", "J.A.R.V.I.S.lnk"):
+                    lnk = str(desktop / lnk_name)
+                    self._create_lnk_windows(lnk, target, str(script),
+                                             str(script.parent), icon_loc)
 
             # ── macOS — proper .app bundle (no Terminal window) ───────────────
             elif _os == "Darwin":
