@@ -182,6 +182,8 @@ class MainWindow(QMainWindow):
         # Center column: HUD + resizable content panel via QSplitter
         self.hud = HudCanvas(face_path, _display)
         self.hud.on_exit_hud = self._toggle_movie_mode
+        self.hud.on_toggle_mute = self._toggle_mute
+        self.hud.on_interrupt = self._do_interrupt
         self.hud.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._content_panel = self._build_content_panel()
         self._quiz_panel = self._build_quiz_panel()

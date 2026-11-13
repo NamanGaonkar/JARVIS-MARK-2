@@ -26,9 +26,9 @@ _loc_lock = threading.Lock()
 
 
 def fetch_tactical_tiles(lat: float, lon: float, zoom: int = 14) -> bool:
-    """Download 2x2 grid of CartoDB Dark Matter tiles centered on coords and save to tactical_map.png."""
+    """Download 2x2 grid of OpenStreetMap tiles, convert to dark tactical HUD amber, and save."""
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps, ImageEnhance
     except ImportError:
         return False
 
@@ -38,20 +38,30 @@ def fetch_tactical_tiles(lat: float, lon: float, zoom: int = 14) -> bool:
         yc = (1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n
         x0, y0 = int(xc), int(yc)
 
-        canvas = Image.new("RGB", (512, 512), (18, 10, 2))
+        canvas = Image.new("RGB", (512, 512), (12, 8, 3))
         for dx in range(2):
             for dy in range(2):
                 tx = x0 + dx
                 ty = y0 + dy
-                url = f"https://a.basemaps.cartocdn.com/dark_all/{zoom}/{tx}/{ty}.png"
-                req = urllib.request.Request(url, headers={"User-Agent": "JarvisMark2/2.0"})
-                with urllib.request.urlopen(req, timeout=3.5) as resp:
-                    tile = Image.open(io.BytesIO(resp.read()))
-                    canvas.paste(tile, (dx * 256, dy * 256))
+                url = f"https://tile.openstreetmap.org/{zoom}/{tx}/{ty}.png"
+                req = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "JarvisAI-Assistant/2.0 (contact: namangaonkar@gmail.com)"}
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=4.0) as resp:
+                        raw = Image.open(io.BytesIO(resp.read())).convert("RGB")
+                        gray = ImageOps.grayscale(raw)
+                        inv = ImageOps.invert(gray)
+                        contrast = ImageEnhance.Contrast(inv).enhance(1.35)
+                        tactical = ImageOps.colorize(contrast, black=(12, 8, 3), white=(225, 148, 25))
+                        canvas.paste(tactical, (dx * 256, dy * 256))
+                except Exception as te:
+                    print(f"[location] tile ({tx}, {ty}) fetch error: {te}")
 
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         canvas.save(str(MAP_FILE))
-        print(f"[location] Tactical map tile updated for ({lat:.4f}, {lon:.4f}) -> {MAP_FILE}")
+        print(f"[location] OSM tactical map updated for ({lat:.4f}, {lon:.4f}) -> {MAP_FILE}")
         return True
     except Exception as e:
         print(f"[location] could not fetch tactical tiles: {e}")

@@ -212,34 +212,112 @@ class Reactor3D:
         sr = r * _SPHERE * (1.0 + 0.18 * amp)
 
         # Outer fiery atmospheric halo
-        corona_r = sr * 2.8
+        corona_r = sr * 2.85
         corona = QRadialGradient(cx, cy, corona_r)
-        corona.setColorAt(0.0, _with_alpha(acc, 0.32 + 0.25 * amp))
-        corona.setColorAt(0.35, _with_alpha(main, 0.16 + 0.18 * amp))
+        corona.setColorAt(0.0, _with_alpha(acc, 0.35 + 0.25 * amp))
+        corona.setColorAt(0.35, _with_alpha(main, 0.18 + 0.18 * amp))
         corona.setColorAt(0.70, _with_alpha(main, 0.05))
         corona.setColorAt(1.0, _with_alpha(main, 0.0))
         p.setBrush(QBrush(corona))
         p.drawEllipse(QPointF(cx, cy), corona_r, corona_r)
 
+        # 10 Toroidal Magnetic Confinement Induction Coils around reactor boundary
+        coil_r_in = sr * 0.95
+        coil_r_out = sr * 1.34
+        for k in range(10):
+            angle = (k * 2.0 * math.pi / 10.0) + spin * 0.14
+            c_cos, c_sin = math.cos(angle), math.sin(angle)
+            p1_x = cx + coil_r_in * c_cos
+            p1_y = cy + coil_r_in * c_sin
+            p2_x = cx + coil_r_out * c_cos
+            p2_y = cy + coil_r_out * c_sin
+
+            # Heavy magnetic stator bracket body
+            p.setPen(QPen(_with_alpha(main, 0.40 + 0.35 * amp), 3.8))
+            p.drawLine(QLineF(p1_x, p1_y, p2_x, p2_y))
+
+            # Radiant copper-gold induction windings
+            p.setPen(QPen(_with_alpha(acc, 0.75 + 0.25 * amp), 1.8))
+            p.drawLine(QLineF(p1_x, p1_y, p2_x, p2_y))
+
+            # Outer magnetic capacitor tip nodes
+            tip_x = cx + (coil_r_out + 2.8) * c_cos
+            tip_y = cy + (coil_r_out + 2.8) * c_sin
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(_with_alpha(white if (k % 2 == 0) else acc, 0.88)))
+            p.drawEllipse(QPointF(tip_x, tip_y), 2.0, 2.0)
+
+        # Concentric Technical Stator Telemetry Ring with 36 micro-hash ticks
+        stator_r = sr * 0.92
+        p.setPen(QPen(_with_alpha(main, 0.35 + 0.25 * amp), 1.0))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QPointF(cx, cy), stator_r, stator_r)
+        p.drawEllipse(QPointF(cx, cy), stator_r * 0.72, stator_r * 0.72)
+
+        for t_idx in range(36):
+            t_ang = (t_idx * 2.0 * math.pi / 36.0) - spin * 0.16
+            t_cos, t_sin = math.cos(t_ang), math.sin(t_ang)
+            t_len = 5.5 if (t_idx % 9 == 0) else (3.2 if (t_idx % 3 == 0) else 1.8)
+            p.setPen(QPen(_with_alpha(acc if (t_idx % 9 == 0) else main, 0.70 if (t_idx % 9 == 0) else 0.35), 1.0))
+            p.drawLine(QLineF(cx + (stator_r - t_len) * t_cos, cy + (stator_r - t_len) * t_sin,
+                              cx + stator_r * t_cos, cy + stator_r * t_sin))
+
+        # Dynamic Plasma Micro-Lightning Discharge Filaments
+        if live or amp > 0.03:
+            p.setPen(QPen(_with_alpha(white, 0.80 * min(1.0, amp * 1.6 + 0.35)), 1.3))
+            for f_idx in range(5):
+                f_ang = (f_idx * 2.0 * math.pi / 5.0) + spin * 1.6 + math.sin(spin * 5.0 + f_idx) * 0.35
+                f_cos, f_sin = math.cos(f_ang), math.sin(f_ang)
+                m_r = sr * (0.35 + 0.25 * math.sin(spin * 3.5 + f_idx))
+                m_x = cx + m_r * f_cos + math.sin(spin * 12.0 + f_idx) * 3.5
+                m_y = cy + m_r * f_sin + math.cos(spin * 12.0 + f_idx) * 3.5
+                t_x = cx + stator_r * f_cos
+                t_y = cy + stator_r * f_sin
+                p.drawLine(QLineF(cx, cy, m_x, m_y))
+                p.drawLine(QLineF(m_x, m_y, t_x, t_y))
+
         # Radiant spherical core
         core_grad = QRadialGradient(QPointF(cx, cy), sr, QPointF(cx - sr * 0.15, cy - sr * 0.20))
-        core_grad.setColorAt(0.0, _with_alpha(white, 0.95))
-        core_grad.setColorAt(0.20, _with_alpha(white, 0.85))
-        core_grad.setColorAt(0.50, _with_alpha(acc, 0.75 + 0.20 * amp))
-        core_grad.setColorAt(0.85, _with_alpha(main, 0.35))
-        core_grad.setColorAt(1.0, _with_alpha(main, 0.05))
+        core_grad.setColorAt(0.0, _with_alpha(white, 0.98))
+        core_grad.setColorAt(0.20, _with_alpha(white, 0.88))
+        core_grad.setColorAt(0.50, _with_alpha(acc, 0.80 + 0.20 * amp))
+        core_grad.setColorAt(0.85, _with_alpha(main, 0.38))
+        core_grad.setColorAt(1.0, _with_alpha(main, 0.06))
         p.setBrush(QBrush(core_grad))
         p.drawEllipse(QPointF(cx, cy), sr, sr)
 
         # Central white-hot nuclear heart
-        heart_r = sr * (0.28 + 0.20 * amp)
+        heart_r = sr * (0.28 + 0.22 * amp)
         heart = QRadialGradient(cx, cy, heart_r)
         heart.setColorAt(0.0, _with_alpha(white, 1.0))
-        heart.setColorAt(0.55, _with_alpha(white, 0.85))
-        heart.setColorAt(0.85, _with_alpha(acc, 0.40))
+        heart.setColorAt(0.55, _with_alpha(white, 0.90))
+        heart.setColorAt(0.85, _with_alpha(acc, 0.45))
         heart.setColorAt(1.0, _with_alpha(acc, 0.0))
         p.setBrush(QBrush(heart))
         p.drawEllipse(QPointF(cx, cy), heart_r, heart_r)
+
+        # Spherical glass refraction highlight on upper-left quadrant
+        spec_grad = QRadialGradient(cx - sr * 0.32, cy - sr * 0.32, sr * 0.60)
+        spec_grad.setColorAt(0.0, _with_alpha(white, 0.42 + 0.20 * amp))
+        spec_grad.setColorAt(0.50, _with_alpha(white, 0.12))
+        spec_grad.setColorAt(1.0, _with_alpha(white, 0.0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(spec_grad))
+        p.drawEllipse(QPointF(cx - sr * 0.28, cy - sr * 0.28), sr * 0.52, sr * 0.35)
+
+        # Horizontal anamorphic cinematic lens flare across reactor core
+        flare_w = r * 1.85 * (1.0 + 0.30 * amp)
+        flare_h = max(2.5, 3.5 + 7.5 * amp)
+        flare_grad = QLinearGradient(cx - flare_w, cy, cx + flare_w, cy)
+        flare_grad.setColorAt(0.0, _with_alpha(acc, 0.0))
+        flare_grad.setColorAt(0.25, _with_alpha(acc, 0.12 + 0.15 * amp))
+        flare_grad.setColorAt(0.48, _with_alpha(white, 0.55 + 0.40 * amp))
+        flare_grad.setColorAt(0.50, _with_alpha(white, 0.95))
+        flare_grad.setColorAt(0.52, _with_alpha(white, 0.55 + 0.40 * amp))
+        flare_grad.setColorAt(0.75, _with_alpha(acc, 0.12 + 0.15 * amp))
+        flare_grad.setColorAt(1.0, _with_alpha(acc, 0.0))
+        p.setBrush(QBrush(flare_grad))
+        p.drawRect(QRectF(cx - flare_w, cy - flare_h * 0.5, flare_w * 2.0, flare_h))
 
         # ── 5. DRAW FRONT ELEMENTS (Z >= 0) ──────────────────────────────────
         # Front particles (bright, sparkling, depth-amplified)

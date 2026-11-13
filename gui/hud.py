@@ -99,8 +99,14 @@ class HudCanvas(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._map_rect = QRectF()
         self._exit_btn_rect = QRectF()
+        self._mute_btn_rect = QRectF()
+        self._interrupt_btn_rect = QRectF()
         self._hover_exit = False
+        self._hover_mute = False
+        self._hover_interrupt = False
         self.on_exit_hud = None
+        self.on_toggle_mute = None
+        self.on_interrupt = None
         self._map_zoom = 1.0
         self._map_pan_x = 0.0
         self._map_pan_y = 0.0
@@ -323,7 +329,23 @@ class HudCanvas(QWidget):
                     self.on_exit_hud()
                 return
 
-            # 2. Map Redirect Link Button [↗] or Location Label
+            # 2. Mute Button
+            if hasattr(self, "_mute_btn_rect") and self._mute_btn_rect.contains(pos):
+                if hasattr(self, "on_toggle_mute") and callable(self.on_toggle_mute):
+                    self.on_toggle_mute()
+                    self.append_hud_log("MIC: State toggled.")
+                    self.update()
+                return
+
+            # 3. Interrupt Button
+            if hasattr(self, "_interrupt_btn_rect") and self._interrupt_btn_rect.contains(pos):
+                if hasattr(self, "on_interrupt") and callable(self.on_interrupt):
+                    self.on_interrupt()
+                    self.append_hud_log("VOICE: Speech interrupted.")
+                    self.update()
+                return
+
+            # 4. Map Redirect Link Button [↗] or Location Label
             if hasattr(self, "_btn_redirect") and self._btn_redirect.contains(pos):
                 self._open_map_redirect()
                 return
@@ -331,7 +353,7 @@ class HudCanvas(QWidget):
                 self._open_map_redirect()
                 return
 
-            # 3. Interactive Map Widget Controls
+            # 5. Interactive Map Widget Controls
             if hasattr(self, "_btn_zoom_in") and self._btn_zoom_in.contains(pos):
                 self._map_zoom = min(2.5, self._map_zoom + 0.3)
                 self.update()
@@ -371,11 +393,24 @@ class HudCanvas(QWidget):
             return
 
         hover_exit = hasattr(self, "_exit_btn_rect") and self._exit_btn_rect.contains(pos)
+        hover_mute = hasattr(self, "_mute_btn_rect") and self._mute_btn_rect.contains(pos)
+        hover_int = hasattr(self, "_interrupt_btn_rect") and self._interrupt_btn_rect.contains(pos)
         hover_map = hasattr(self, "_map_rect") and self._map_rect.contains(pos)
+
+        changed = False
         if getattr(self, "_hover_exit", False) != hover_exit:
             self._hover_exit = hover_exit
+            changed = True
+        if getattr(self, "_hover_mute", False) != hover_mute:
+            self._hover_mute = hover_mute
+            changed = True
+        if getattr(self, "_hover_interrupt", False) != hover_int:
+            self._hover_interrupt = hover_int
+            changed = True
+        if changed:
             self.update()
-        if hover_exit or hover_map:
+
+        if hover_exit or hover_mute or hover_int or hover_map:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
         else:
             self.unsetCursor()
@@ -790,6 +825,41 @@ class HudCanvas(QWidget):
         p.setFont(px_font(9, QFont.Weight.Bold, mono=True, spacing=1.0))
         p.setPen(QPen(blend(C.PRI if is_hover_exit else C.TEXT, 0.95)))
         p.drawText(self._exit_btn_rect, Qt.AlignmentFlag.AlignCenter, "< WORKSTATION [ESC]")
+        p.restore()
+
+        # ── Top-Left Control Bar: MUTE & INTERRUPT ────────────────────────
+        self._mute_btn_rect = QRectF(184.0, 18.0, 110.0, 30.0)
+        is_hover_mute = bool(getattr(self, "_hover_mute", False))
+        p.save()
+        if self.muted:
+            mute_col = qcol(C.MUTED_C)
+            mute_txt = "MIC MUTED"
+            mute_bg = QColor(255, 59, 48, 65 if is_hover_mute else 24)
+        else:
+            mute_col = qcol(C.GREEN)
+            mute_txt = "MIC ACTIVE"
+            mute_bg = QColor(0, 229, 117, 45 if is_hover_mute else 16)
+        p.setPen(QPen(mute_col, 1.2))
+        p.setBrush(QBrush(mute_bg))
+        p.drawRoundedRect(self._mute_btn_rect, 4, 4)
+        p.setFont(px_font(9, QFont.Weight.Bold, mono=True, spacing=1.0))
+        p.setPen(QPen(mute_col))
+        p.drawText(self._mute_btn_rect, Qt.AlignmentFlag.AlignCenter, mute_txt)
+        p.restore()
+
+        self._interrupt_btn_rect = QRectF(304.0, 18.0, 125.0, 30.0)
+        is_hover_int = bool(getattr(self, "_hover_interrupt", False))
+        is_spk = bool(self.speaking)
+        p.save()
+        int_col = qcol(C.ACC if is_spk else C.PRI)
+        int_bg = QColor(255, 90, 0, 70 if is_hover_int else 30) if is_spk else QColor(255, 157, 0, 45 if is_hover_int else 14)
+        int_txt = "STOP SPEECH" if is_spk else "INTERRUPT"
+        p.setPen(QPen(int_col, 1.2))
+        p.setBrush(QBrush(int_bg))
+        p.drawRoundedRect(self._interrupt_btn_rect, 4, 4)
+        p.setFont(px_font(9, QFont.Weight.Bold, mono=True, spacing=1.0))
+        p.setPen(QPen(int_col))
+        p.drawText(self._interrupt_btn_rect, Qt.AlignmentFlag.AlignCenter, int_txt)
         p.restore()
 
         # ── Top-Right HUD Clock (Movie accurate) ──────────────────────────
