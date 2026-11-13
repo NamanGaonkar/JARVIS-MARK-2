@@ -552,23 +552,6 @@ TOOL_DECLARATIONS = [
         }
     },
     {
-        "name": "toggle_pip_mode",
-        "description": (
-            "Switch between the full application window and Picture-in-Picture (PiP) floating mini core mode. "
-            "Use when the user asks to minimize to core, picture-in-picture, float on top, or restore the full window."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "enable": {
-                    "type": "BOOLEAN",
-                    "description": "True to enter Picture-in-Picture mode; False to restore full application window."
-                }
-            },
-            "required": ["enable"]
-        }
-    },
-    {
         "name": "undo",
         "description": (
             "Reverse the last change YOU made to this computer — a file you "
@@ -1747,11 +1730,6 @@ class JarvisLive:
                 result = await loop.run_in_executor(
                     None, search_chat_history, args.get("query", ""), 6
                 )
-
-            elif name == "toggle_pip_mode":
-                enable = bool(args.get("enable", True))
-                self.ui.set_pip(enable)
-                result = f"Switched to {'Picture-in-Picture floating mini core' if enable else 'Full Application window'}."
 
             elif name == "undo":
                 if str(args.get("action", "")).lower().strip() == "list":

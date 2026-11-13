@@ -102,7 +102,6 @@ class JarvisUI:
         _apply_ui_scale()
         self._app = QApplication.instance() or QApplication(sys.argv)
         self._app.setStyle("Fusion")
-        self._app.setQuitOnLastWindowClosed(False)  # Keep running when window hides in PiP mode
         self._win = MainWindow(face_path)
         self.root = _RootShim(self._app)
         self._win.show()
@@ -215,8 +214,6 @@ class JarvisUI:
         GIL, so no signal/lock is needed for this cosmetic value."""
         try:
             self._win.hud.set_audio_level(level)
-            if hasattr(self._win, "_pip_window") and self._win._pip_window is not None:
-                self._win._pip_window.set_audio_level(level)
         except Exception:
             pass
 
@@ -249,18 +246,8 @@ class JarvisUI:
         sound, not the time of the call. See HudCanvas.push_visemes()."""
         try:
             self._win.hud.push_visemes(frames, hop, at)
-            if hasattr(self._win, "_pip_window") and self._win._pip_window is not None and frames:
-                self._win._pip_window.set_viseme(frames[-1][0])
         except Exception:
             pass
-
-    def toggle_pip(self) -> None:
-        """Thread-safe: toggle Picture-in-Picture floating mini core mode."""
-        self._win._pip_sig.emit(not getattr(self._win, "_pip_mode", False))
-
-    def set_pip(self, enable: bool) -> None:
-        """Thread-safe: enter or exit Picture-in-Picture floating mini core mode."""
-        self._win._pip_sig.emit(bool(enable))
 
     def notify_phone_connected(self) -> None:
         self._win.notify_phone_connected()

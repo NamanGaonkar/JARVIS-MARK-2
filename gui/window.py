@@ -89,7 +89,6 @@ from gui.providers_panel import (
 from PyQt6.QtWidgets import QGridLayout
 
 from gui.style import DISPLAY_CSS, btn_css, hud_font, px_font, scroll_css
-from gui.pip import PipWindow
 from gui.widgets import (ArcLogo, CommandFrame, DataRow, HeaderBar, HoloPanel, IconButton,
                          PanelText, RingGauge, RoutineRow, Sparkline, StateChip, StatusStrip,
                          TaskRow)
@@ -148,7 +147,6 @@ class MainWindow(QMainWindow):
     _quiz_hide_sig  = pyqtSignal()
     _review_sig     = pyqtSignal(str, str, object, object)  # document review payload
     _refresh_tasks_sig = pyqtSignal()                      # instant tasks & routines panel refresh
-    _pip_sig        = pyqtSignal(bool)                     # True=enter PiP floating mode, False=restore full app
 
     def __init__(self, face_path: str):
         super().__init__()
@@ -465,15 +463,8 @@ class MainWindow(QMainWindow):
         if not self._ready:
             self._show_setup()
 
-        self._pip_window = PipWindow()
-        self._pip_window.restore_requested.connect(self._exit_pip_mode)
-        self._pip_window.mute_toggled.connect(self._toggle_mute)
-        self._pip_sig.connect(self._set_pip_mode)
-
         sc_mute = QShortcut(QKeySequence("F4"), self)
         sc_mute.activated.connect(self._toggle_mute)
-        sc_pip = QShortcut(QKeySequence("F9"), self)
-        sc_pip.activated.connect(self._toggle_pip_mode)
         sc_movie = QShortcut(QKeySequence("F10"), self)
         sc_movie.activated.connect(self._toggle_movie_mode)
         sc_full = QShortcut(QKeySequence("F11"), self)
@@ -1235,35 +1226,6 @@ class MainWindow(QMainWindow):
         else:
             self.showFullScreen()
 
-    def _toggle_pip_mode(self):
-        """Toggle Picture-in-Picture floating mini core mode."""
-        self._set_pip_mode(not getattr(self, "_pip_mode", False))
-
-    def _set_pip_mode(self, enable: bool):
-        """Enter or exit Picture-in-Picture floating mini core mode."""
-        self._pip_mode = bool(enable)
-        if self._pip_mode:
-            screen = QApplication.primaryScreen()
-            if screen:
-                geom = screen.availableGeometry()
-                w = self._pip_window.width()
-                h = self._pip_window.height()
-                self._pip_window.move(geom.right() - w - 40, geom.bottom() - h - 50)
-            self._pip_window.set_state(getattr(self, "_current_state", "LISTENING"))
-            self._pip_window.set_muted(self._muted)
-            self.hide()
-            self._pip_window.show()
-            self._pip_window.raise_()
-            self._pip_window.activateWindow()
-        else:
-            self._pip_window.hide()
-            self.show()
-            self.raise_()
-            self.activateWindow()
-
-    def _exit_pip_mode(self):
-        self._set_pip_mode(False)
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._fit_side_columns()
@@ -1404,20 +1366,6 @@ class MainWindow(QMainWindow):
         clock_col.addWidget(self._date_lbl)
         lay.addLayout(clock_col)
         lay.addSpacing(6)
-        self._pip_btn = QPushButton("PIP")
-        self._pip_btn.setFont(hud_font(8, QFont.Weight.Bold))
-        self._pip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._pip_btn.setStyleSheet(f"""
-            QPushButton {{
-                color: {C.PRI}; background: {C.PRI_GHO};
-                border: 1px solid {C.BORDER_B}; border-radius: 4px; padding: 4px 8px;
-            }}
-            QPushButton:hover {{ background: {C.BORDER_A}; color: {C.WHITE}; }}
-        """)
-        self._pip_btn.setToolTip("Picture-in-Picture Floating Mini Core  [F9]")
-        self._pip_btn.clicked.connect(self._toggle_pip_mode)
-        lay.addWidget(self._pip_btn)
-        lay.addSpacing(2)
         self._movie_btn = QPushButton("HUD")
         self._movie_btn.setFont(hud_font(8, QFont.Weight.Bold))
         self._movie_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -3069,8 +3017,6 @@ class MainWindow(QMainWindow):
             return
         self._muted = muted
         self.hud.muted = muted
-        if hasattr(self, "_pip_window") and self._pip_window is not None:
-            self._pip_window.set_muted(muted)
         self._style_mute_btn()
         if muted:
             self._apply_state("MUTED")
@@ -3100,8 +3046,6 @@ class MainWindow(QMainWindow):
         self.hud.speaking = (state == "SPEAKING")
         if hasattr(self, "_state_chip"):
             self._state_chip.set_state(state)
-        if hasattr(self, "_pip_window") and self._pip_window is not None:
-            self._pip_window.set_state(state)
 
     def _check_config(self) -> bool:
         d = _read_full_config()
