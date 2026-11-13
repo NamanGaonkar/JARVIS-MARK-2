@@ -798,7 +798,7 @@ class AudioDeviceOverlay(_HudOverlay):
             # startup, so opening this panel never blocks the Qt thread on the
             # host audio API.
             box.addItem(DEFAULT_LABEL, "")
-            for name in list_devices(kind):
+            for name in list_devices(kind, refresh=True):
                 box.addItem(name, name)
             idx = box.findData(current) if current else 0
             box.setCurrentIndex(idx if idx >= 0 else 0)
@@ -944,6 +944,18 @@ class AudioDeviceOverlay(_HudOverlay):
         ok.clicked.connect(self._apply)
         row.addWidget(ok)
 
+        refresh_btn = QPushButton("↻  RE-SCAN")
+        refresh_btn.setFixedHeight(32)
+        refresh_btn.setFont(hud_font(8, QFont.Weight.Bold))
+        refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        refresh_btn.setStyleSheet(f"""
+            QPushButton {{ background: transparent; color: {C.TEXT};
+                border: 1px solid {C.BORDER}; border-radius: 3px; }}
+            QPushButton:hover {{ color: {C.PRI}; border-color: {C.PRI_DIM}; }}
+        """)
+        refresh_btn.clicked.connect(self._refresh_device_boxes)
+        row.addWidget(refresh_btn)
+
         cancel = QPushButton("CLOSE")
         cancel.setFixedHeight(32)
         cancel.setFont(hud_font(9))
@@ -956,6 +968,23 @@ class AudioDeviceOverlay(_HudOverlay):
         cancel.clicked.connect(self.hide)
         row.addWidget(cancel)
         lay.addLayout(row)
+
+    def _refresh_device_boxes(self):
+        from core.audio_devices import list_devices, DEFAULT_LABEL
+        from memory.config_manager import get_input_device, get_output_device
+        for box, kind, curr in [
+            (self._in_box, "input", get_input_device()),
+            (self._out_box, "output", get_output_device()),
+        ]:
+            curr_data = box.currentData() or curr
+            box.blockSignals(True)
+            box.clear()
+            box.addItem(DEFAULT_LABEL, "")
+            for name in list_devices(kind, refresh=True):
+                box.addItem(name, name)
+            idx = box.findData(curr_data) if curr_data else 0
+            box.setCurrentIndex(idx if idx >= 0 else 0)
+            box.blockSignals(False)
 
     def _apply_volume(self):
         """Set the system output volume from the slider, off the Qt thread.

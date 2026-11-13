@@ -552,6 +552,59 @@ TOOL_DECLARATIONS = [
         }
     },
     {
+        "name": "get_current_time_and_date",
+        "description": (
+            "Get the exact live current local time, date, day of week, and timezone. "
+            "ALWAYS call this tool whenever the user asks 'what time is it?', 'what is today's date?', "
+            "'what day is it?', or when calculating time deltas or scheduling reminders."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "manage_audio_devices",
+        "description": (
+            "List connected audio devices or switch the active speaker/headset output device or microphone input device. "
+            "Use when the user asks: 'switch audio to Echo Pop', 'change speakers to Realtek', 'what audio devices are connected?', "
+            "'switch mic to DroidCam', 'use my headphones', etc."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {
+                    "type": "STRING",
+                    "description": "One of: 'list', 'switch_output', 'switch_input'."
+                },
+                "device": {
+                    "type": "STRING",
+                    "description": "Device name or keyword to switch to (e.g. 'Echo Pop', 'Realtek', 'Headset', 'default'). Optional for 'list'."
+                }
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "toggle_vision_mode",
+        "description": (
+            "Toggle continuous live vision modes: CAM MODE (continuous laptop camera feed so JARVIS can actively see the user), "
+            "SCREEN MODE (continuous live presentation of desktop screen so JARVIS can actively see and describe the screen), "
+            "or 'off' to return to regular voice mode. Use when the user says 'turn on cam mode', 'start screen mode', 'watch my screen', 'stop cam mode', etc."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "mode": {
+                    "type": "STRING",
+                    "description": "The vision mode: 'camera' (or 'cam'), 'screen', or 'off' (or 'regular')."
+                }
+            },
+            "required": ["mode"]
+        }
+    },
+    {
         "name": "undo",
         "description": (
             "Reverse the last change YOU made to this computer — a file you "
@@ -799,6 +852,11 @@ class JarvisLive:
         self.ui.on_wake_toggle   = self._ui_wake_toggle   # (enable: bool) -> str
         self.ui.on_wake_manual   = self._ui_wake_manual   # () -> toggle awake/asleep
         self.ui.on_wake_install  = self._ui_wake_install  # () -> (ok, msg)
+
+        # Vision mode control surface
+        self.ui.on_vision_mode_change = self._on_vision_mode_change
+        self._active_vision_mode: str = "off"
+        self._vision_stream_task = None
 
     # ── Wake word: state machine ─────────────────────────────────────────────
 
@@ -1431,11 +1489,16 @@ class JarvisLive:
         sys_prompt = _load_system_prompt()
 
         now      = datetime.now()
-        time_str = now.strftime("%A, %B %d, %Y — %I:%M %p")
+        time_str = now.strftime("%A, %B %d, %Y — %I:%M:%S %p")
+        tz_name  = time.tzname[time.daylight] if hasattr(time, 'tzname') else "Local"
         time_ctx = (
-            f"[CURRENT DATE & TIME]\n"
-            f"Right now it is: {time_str}\n"
-            f"Use this to calculate exact times for reminders.\n\n"
+            f"[CURRENT DATE, TIME & TIMEZONE]\n"
+            f"Current local time: {time_str} ({tz_name}).\n"
+            f"Today is: {now.strftime('%A, %B %d, %Y')}.\n"
+            f"CRITICAL CHAT HISTORY & RECENT ACTIVITY RULES:\n"
+            f"- Always rely strictly on the exact timestamps and relative times recorded in past session summaries.\n"
+            f"- If a session or conversation occurred earlier today (e.g. 15 minutes ago, 2 hours ago), refer to it accurately as 'earlier today' or 'X minutes/hours ago' — NEVER hallucinate that earlier today's conversation was 'last night' or 'yesterday'.\n"
+            f"- For precise up-to-the-second current time or date queries, you can call get_current_time_and_date.\n\n"
         )
 
         # Identity injection — overrides any hardcoded name in prompt.txt
@@ -1780,6 +1843,58 @@ class JarvisLive:
                 self.ui.stop_camera_stream()
                 result = "Camera closed."
 
+            elif name == "get_current_time_and_date":
+                now = datetime.now()
+                tz_name = time.tzname[time.daylight] if hasattr(time, 'tzname') else "Local"
+                result = json.dumps({
+                    "current_time_12h": now.strftime("%I:%M:%S %p"),
+                    "current_time_24h": now.strftime("%H:%M:%S"),
+                    "date": now.strftime("%A, %B %d, %Y"),
+                    "day_of_week": now.strftime("%A"),
+                    "timezone": tz_name,
+                    "summary": f"Right now it is {now.strftime('%I:%M:%S %p')} on {now.strftime('%A, %B %d, %Y')} ({tz_name})."
+                })
+
+            elif name == "manage_audio_devices":
+                action = str(args.get("action", "list")).lower().strip()
+                dev_name = str(args.get("device_name", "")).strip()
+                from core.audio_devices import list_devices, switch_audio_device, get_device_name
+                if action == "list":
+                    ins = list_devices("input")
+                    outs = list_devices("output")
+                    cur_in = get_device_name("input") or "Default"
+                    cur_out = get_device_name("output") or "Default"
+                    result = json.dumps({
+                        "current_input": cur_in,
+                        "current_output": cur_out,
+                        "available_microphones": ins,
+                        "available_speakers": outs,
+                    })
+                elif action in ("switch_output", "switch_speaker"):
+                    ok, msg = switch_audio_device("output", dev_name)
+                    if ok:
+                        self.request_reconnect(keep_context=True, reason="audio output switch")
+                    result = msg
+                elif action in ("switch_input", "switch_mic", "switch_microphone"):
+                    ok, msg = switch_audio_device("input", dev_name)
+                    if ok:
+                        self.request_reconnect(keep_context=True, reason="microphone switch")
+                    result = msg
+                else:
+                    result = f"Unknown action '{action}'. Use 'list', 'switch_output', or 'switch_input'."
+
+            elif name == "toggle_vision_mode":
+                mode = str(args.get("mode", "off")).lower().strip()
+                if mode not in ("camera", "screen", "off"):
+                    mode = "off"
+                self.ui.set_vision_mode(mode)
+                if mode == "camera":
+                    result = "CAM MODE is now ON. I can continuously see you through your webcam."
+                elif mode == "screen":
+                    result = "SCREEN MODE is now ON. I can actively see your desktop screen in real-time."
+                else:
+                    result = "Vision mode set to regular. Continuous streaming is OFF."
+
             elif name == "system_status":
                 r = await loop.run_in_executor(None, get_system_status)
                 result = str(r)
@@ -2076,6 +2191,92 @@ class JarvisLive:
         else:
             self._vision_busy = False
         return True
+
+    def _on_vision_mode_change(self, mode: str) -> None:
+        """Called when UI toggles vision mode (button, shortcut F6/F7, or tool)."""
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._apply_vision_mode(mode), self._loop)
+
+    async def _apply_vision_mode(self, mode: str) -> None:
+        mode = str(mode or "off").lower().strip()
+        if mode not in ("camera", "screen", "off"):
+            mode = "off"
+        self._active_vision_mode = mode
+
+        if self._vision_stream_task and not self._vision_stream_task.done():
+            self._vision_stream_task.cancel()
+            self._vision_stream_task = None
+
+        if mode == "camera":
+            self._vision_stream_task = asyncio.create_task(self._continuous_cam_loop())
+        elif mode == "screen":
+            self._vision_stream_task = asyncio.create_task(self._continuous_screen_loop())
+
+    async def _continuous_cam_loop(self) -> None:
+        """Continuous camera frame streamer to Gemini Live session."""
+        print("[Vision] 📹 Continuous CAM stream started.")
+        try:
+            import cv2
+            from actions.screen_processor import _get_camera_index, _cv2_backend
+            backend = _cv2_backend()
+            cam_idx = _get_camera_index()
+            cap = cv2.VideoCapture(cam_idx, backend)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                print("[Vision] ⚠️ Could not open camera for continuous streaming.")
+                return
+
+            for _ in range(5):
+                cap.read()
+
+            while self._active_vision_mode == "camera":
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    h, w = frame.shape[:2]
+                    max_dim = 640
+                    if max(h, w) > max_dim:
+                        scale = max_dim / float(max(h, w))
+                        frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+                    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+                    img_bytes = buf.tobytes()
+                    if self.session:
+                        try:
+                            await self.session.send_realtime_input(
+                                media_chunks=[types.Blob(data=img_bytes, mime_type="image/jpeg")]
+                            )
+                        except Exception as e:
+                            print(f"[Vision] ⚠️ Realtime cam frame send error: {e}")
+                await asyncio.sleep(1.5)
+            cap.release()
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"[Vision] ⚠️ Continuous CAM loop error: {e}")
+        finally:
+            print("[Vision] 📹 Continuous CAM stream stopped.")
+
+    async def _continuous_screen_loop(self) -> None:
+        """Continuous desktop screen frame streamer to Gemini Live session."""
+        print("[Vision] 🖥️ Continuous SCREEN presentation stream started.")
+        try:
+            from actions.screen_processor import _capture_screen
+            while self._active_vision_mode == "screen":
+                try:
+                    img_bytes, mime_t = await asyncio.to_thread(_capture_screen)
+                    if self.session and img_bytes:
+                        await self.session.send_realtime_input(
+                            media_chunks=[types.Blob(data=img_bytes, mime_type=mime_t)]
+                        )
+                except Exception as e:
+                    print(f"[Vision] ⚠️ Realtime screen frame send error: {e}")
+                await asyncio.sleep(1.5)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"[Vision] ⚠️ Continuous SCREEN loop error: {e}")
+        finally:
+            print("[Vision] 🖥️ Continuous SCREEN presentation stream stopped.")
 
     async def _receive_audio(self):
         print("[JARVIS] 👂 Recv started")
@@ -3012,6 +3213,10 @@ class JarvisLive:
                     tg.create_task(self._run_sleep_watch())
                     if self._dashboard:
                         tg.create_task(self._relay_phone_audio())
+
+                    # Resume active continuous vision streaming (CAM mode / SCREEN mode) if active
+                    if getattr(self, "_active_vision_mode", "off") != "off":
+                        await self._apply_vision_mode(self._active_vision_mode)
 
                     # Bring a local engine's speech model up before anybody
                     # speaks. Measured: without it the FIRST sentence waits 8.9

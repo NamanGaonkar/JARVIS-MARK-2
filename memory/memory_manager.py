@@ -463,6 +463,53 @@ def archive_session(turns: list[str], summary: str = "", language: str = "") -> 
         return ""
 
 
+def format_relative_time(ts: float | None = None, date_str: str = "", time_str: str = "") -> str:
+    """Return an exact, crystal-clear relative time string against current local time.
+    Example: 'Today at 08:06 PM (35 minutes ago)' or 'Yesterday at 04:15 PM'."""
+    now = datetime.now()
+    dt = None
+    if ts:
+        try:
+            dt = datetime.fromtimestamp(ts)
+        except Exception:
+            dt = None
+    if dt is None and date_str:
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(f"{date_str} {time_str}".strip(), fmt)
+                break
+            except Exception:
+                pass
+
+    if dt is None:
+        return f"{date_str} {time_str}".strip() or "Earlier"
+
+    time_display = dt.strftime("%I:%M %p")
+    delta = now - dt
+    secs = int(delta.total_seconds())
+    if secs < 0:
+        secs = 0
+    days = (now.date() - dt.date()).days
+
+    if days == 0:
+        if secs < 60:
+            rel = "just now"
+        elif secs < 3600:
+            m = max(1, secs // 60)
+            rel = f"{m} minute{'s' if m != 1 else ''} ago"
+        else:
+            h = secs // 3600
+            rel = f"{h} hour{'s' if h != 1 else ''} ago"
+        return f"Today at {time_display} ({rel})"
+    elif days == 1:
+        return f"Yesterday at {time_display}"
+    elif days < 7:
+        day_name = dt.strftime("%A")
+        return f"{day_name} ({days} days ago) at {time_display}"
+    else:
+        return f"{dt.strftime('%b %d, %Y')} at {time_display}"
+
+
 def search_chat_history(query: str, max_turns: int = 8) -> str:
     """Search across all archived past session transcripts for matching topics, keywords, or discussions."""
     query = (query or "").strip().lower()
@@ -485,6 +532,8 @@ def search_chat_history(query: str, max_turns: int = 8) -> str:
                 data = json.loads(fpath.read_text(encoding="utf-8"))
                 date_str = data.get("date", "Unknown date")
                 time_str = data.get("time", "")
+                ts_val   = data.get("timestamp")
+                rel_time = format_relative_time(ts=ts_val, date_str=date_str, time_str=time_str)
                 summary = data.get("summary", "")
                 messages = data.get("messages", [])
 
@@ -503,11 +552,11 @@ def search_chat_history(query: str, max_turns: int = 8) -> str:
                             matching_turns.append(f"{speaker}: {text}")
 
                 if summary_match or matching_turns:
-                    head = f"📅 Session on {date_str} at {time_str}"
+                    head = f"📅 Session: {rel_time} [Date: {date_str}]"
                     if summary:
-                        head += f" (Summary: {summary})"
+                        head += f"\nSummary: {summary}"
                     content = "\n---\n".join(matching_turns[:3]) if matching_turns else "Discussed topic in session."
-                    matched_results.append(f"{head}\n{content}")
+                    matched_results.append(f"{head}\nExcerpts:\n{content}")
                     if len(matched_results) >= max_turns:
                         break
             except Exception:
@@ -522,34 +571,40 @@ def search_chat_history(query: str, max_turns: int = 8) -> str:
 
 
 def get_past_sessions_context(limit: int = 5) -> str:
-    """Format a concise briefing of recent past sessions for prompt injection."""
+    """Format a concise briefing of recent past sessions with exact relative timestamps for prompt injection."""
     memory = load_memory()
     sessions = memory.get("sessions", [])
-    if not isinstance(sessions, list) or not sessions:
-        if SESSIONS_DIR.exists():
-            files = sorted(SESSIONS_DIR.glob("session_*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
-            loaded = []
-            for fp in files[:limit]:
-                try:
-                    d = json.loads(fp.read_text(encoding="utf-8"))
-                    if d.get("summary"):
-                        loaded.append(f"- {d.get('date')} ({d.get('time')}): {d.get('summary')}")
-                except Exception:
-                    pass
-            if loaded:
-                return "[RECENT PAST SESSIONS CONVERSATION CONTINUITY]\n" + "\n".join(loaded) + "\n\n"
-        return ""
-
     lines = []
-    for s in reversed(sessions[-limit:]):
-        d = s.get("date", "")
-        t = s.get("time", "")
-        sm = s.get("summary", "")
-        if sm:
-            lines.append(f"- {d} ({t}): {sm}")
-    if not lines:
-        return ""
-    return "[RECENT PAST SESSIONS CONVERSATION CONTINUITY]\n" + "\n".join(lines) + "\n\n"
+
+    if isinstance(sessions, list) and sessions:
+        for s in reversed(sessions[-limit:]):
+            d = s.get("date", "")
+            t = s.get("time", "")
+            ts = s.get("timestamp")
+            sm = s.get("summary", "")
+            if sm:
+                rel = format_relative_time(ts=ts, date_str=d, time_str=t)
+                lines.append(f"- Session {rel}: {sm}")
+
+    if not lines and SESSIONS_DIR.exists():
+        files = sorted(SESSIONS_DIR.glob("session_*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+        for fp in files[:limit]:
+            try:
+                d = json.loads(fp.read_text(encoding="utf-8"))
+                sm = d.get("summary")
+                if sm:
+                    rel = format_relative_time(ts=d.get("timestamp"), date_str=d.get("date", ""), time_str=d.get("time", ""))
+                    lines.append(f"- Session {rel}: {sm}")
+            except Exception:
+                pass
+
+    if lines:
+        return (
+            "[RECENT PAST SESSIONS CONVERSATION CONTINUITY & EXACT TIMESTAMPS]\n"
+            + "\n".join(lines)
+            + "\n(Note: Pay strict attention to whether a session was 'Today', 'Yesterday', or earlier. Never refer to a session from earlier today as 'last night' or 'yesterday'.)\n\n"
+        )
+    return ""
 
 
 def save_session_summary(summary: str, language: str = "") -> None:

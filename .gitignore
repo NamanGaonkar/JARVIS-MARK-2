@@ -20,6 +20,7 @@ memory/long_term.json
 memory/*.db
 memory/routines.json
 memory/tasks/
+memory/sessions/
 
 # ── Python build noise ────────────────────────────────────────────────────────
 __pycache__/

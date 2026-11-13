@@ -377,6 +377,24 @@ class JarvisUI:
         self._win.stop_camera_stream()
 
     @property
+    def on_vision_mode_change(self):
+        return self._win.on_vision_mode_change
+
+    @on_vision_mode_change.setter
+    def on_vision_mode_change(self, cb):
+        self._win.on_vision_mode_change = cb
+
+    def set_vision_mode(self, mode: str) -> None:
+        """Thread-safe: set continuous vision mode ('camera', 'screen', 'off')."""
+        self._win._vision_mode_sig.emit(mode)
+
+    def toggle_cam_mode(self) -> None:
+        self._win._toggle_cam_mode()
+
+    def toggle_screen_mode(self) -> None:
+        self._win._toggle_screen_mode()
+
+    @property
     def assistant_name(self) -> str:
         return self._win._assistant_name
 

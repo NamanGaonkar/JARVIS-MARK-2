@@ -25,6 +25,7 @@ WHY THIS IS CACHED
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from typing import Optional
@@ -338,7 +339,9 @@ def list_devices(kind: str, refresh: bool = False) -> list[str]:
     if the prefetch has not landed yet — correctness over the cache."""
     global _cache
     with _cache_lock:
-        cached = None if refresh else _cache
+        if refresh:
+            _cache = None
+        cached = _cache
     if cached is None:
         cached = _query()
         with _cache_lock:
@@ -346,20 +349,25 @@ def list_devices(kind: str, refresh: bool = False) -> list[str]:
     return list(cached.get(kind, []))
 
 
+def refresh_devices() -> dict[str, list[str]]:
+    """Force an immediate rescan of all input and output audio devices."""
+    global _cache
+    with _cache_lock:
+        _cache = None
+    res = _query()
+    with _cache_lock:
+        _cache = res
+    return res
+
+
 def resolve(name: str, kind: str):
-    """Turn a saved device name into something sounddevice accepts.
+    """Turn a saved device name or keyword into something sounddevice accepts.
 
-    Returns None for "system default" — which is also what we return when the
+    Returns None for 'system default' — which is also what we return when the
     saved device is gone, because a missing headset must degrade to the built-in
-    speakers, not to a crash on startup.
-
-    Candidates are walked in the same host-API order the picker used, so a name
-    the user chose from the WASAPI list resolves to the WASAPI endpoint. Without
-    that ordering a full name would fall through to MME's truncated copy of the
-    same device — which happens to work, but means the setting quietly refers to
-    a different endpoint than the one on screen."""
+    speakers, not to a crash on startup."""
     wanted = (name or "").strip()
-    if not wanted or wanted == DEFAULT_LABEL:
+    if not wanted or wanted.lower() in (DEFAULT_LABEL.lower(), "default", "system default", "system"):
         return None
 
     try:
@@ -385,41 +393,81 @@ def resolve(name: str, kind: str):
                         continue
                 yield idx, (dev.get("name") or "").strip()
 
-        # The API the picker settled on for this direction comes first — the
-        # endpoint that was listed must be the endpoint that gets opened, or the
-        # setting means something different from what it says. list_devices()
-        # populates it; calling it here is a no-op once the cache is warm.
         list_devices(kind)
         chosen = _chosen_api.get(kind)
         orders = ([chosen] if chosen is not None else []) \
             + [a for a in _PREFERRED_APIS.get(platform.system(), ()) if a != chosen] \
             + [None]
 
-        # A candidate only counts if it can be opened at the rate this side runs
-        # at. The prefix match matters because the API that carries the audio is
-        # not always the one that can spell: MME truncates names to 31 characters
-        # while DirectSound and WASAPI do not, so the name shown in the picker
-        # can be longer than the name of the endpoint it actually opens.
+        w_low = wanted.lower()
+        w_tokens = set(re.findall(r"[a-z0-9]+", w_low)) - {"audio", "speakers", "microphone", "device", "the", "array", "output", "input"}
+
+        # Tier 1: Exact matches or case-insensitive exact matches
         for api_filter in orders:
-            partial = None
             for idx, dev_name in _candidates(api_filter):
-                if dev_name == wanted:
+                if dev_name.lower() == w_low:
                     if _usable(idx, kind):
                         return idx
-                    continue
-                if partial is None and (dev_name.startswith(wanted[:24])
-                                        or wanted.startswith(dev_name[:24])):
-                    if _usable(idx, kind):
-                        partial = idx
-            if partial is not None:
-                return partial
 
-        print(f"[Audio] Saved {kind} device '{wanted}' cannot be opened at "
-              f"{_RATES.get(kind)} Hz on any host API — using system default")
+        # Tier 2: Substring matches (e.g. 'Echo Pop' in 'Speakers (Echo Pop-76S)')
+        for api_filter in orders:
+            for idx, dev_name in _candidates(api_filter):
+                d_low = dev_name.lower()
+                if (w_low in d_low or d_low in w_low):
+                    if _usable(idx, kind):
+                        return idx
+
+        # Tier 3: Key token overlap (e.g. 'echo' + 'pop')
+        if w_tokens:
+            for api_filter in orders:
+                for idx, dev_name in _candidates(api_filter):
+                    d_tokens = set(re.findall(r"[a-z0-9]+", dev_name.lower()))
+                    if w_tokens.issubset(d_tokens) or (len(w_tokens & d_tokens) >= max(1, len(w_tokens) - 1)):
+                        if _usable(idx, kind):
+                            return idx
+
+        # Tier 4: Prefix match (for truncated MME names)
+        for api_filter in orders:
+            for idx, dev_name in _candidates(api_filter):
+                if dev_name.lower().startswith(w_low[:16]) or w_low.startswith(dev_name.lower()[:16]):
+                    if _usable(idx, kind):
+                        return idx
+
+        print(f"[Audio] Device '{wanted}' ({kind}) cannot be opened on any host API — using system default")
         return None
     except Exception as e:
         print(f"[Audio] resolve({kind}) failed: {e} — using system default")
         return None
+
+
+def switch_audio_device(kind: str, device_name: str) -> tuple[bool, str]:
+    """Switch input or output audio device by name or keyword.
+    Saves setting to configuration and validates usability.
+    Returns (success, message)."""
+    from memory.config_manager import save_input_device, save_output_device
+    wanted = (device_name or "").strip()
+    if not wanted or wanted.lower() in ("default", "system", "system default"):
+        if kind == "input":
+            save_input_device("")
+        else:
+            save_output_device("")
+        return True, f"Switched {kind} device to System Default."
+
+    avail = list_devices(kind, refresh=True)
+    idx = resolve(wanted, kind)
+    if idx is None:
+        avail_str = ", ".join(f"'{d}'" for d in avail) if avail else "None found"
+        return False, f"Could not find a working {kind} device matching '{wanted}'. Available: {avail_str}."
+
+    import sounddevice as sd
+    dev_info = sd.query_devices(idx)
+    matched_name = dev_info.get("name", wanted)
+
+    if kind == "input":
+        save_input_device(matched_name)
+    else:
+        save_output_device(matched_name)
+    return True, f"Successfully switched {kind} device to '{matched_name}'."
 
 
 # ─────────────────────────────────────────────────────────────────────────────

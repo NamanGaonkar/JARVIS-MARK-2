@@ -90,17 +90,57 @@ def _compress(img_bytes: bytes, source_format: str = "PNG") -> tuple[bytes, str]
 
 
 def _capture_screen() -> tuple[bytes, str]:
+    # 1. Try Qt screen grab if QApplication is active (native, ultra-fast, no BitBlt errors)
+    try:
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtGui import QGuiApplication
+        from PyQt6.QtCore import QByteArray, QBuffer, QIODevice
+        app = QApplication.instance()
+        if app is None:
+            import sys
+            app = QApplication(sys.argv if sys.argv else ["jarvis"])
+        if app is not None:
+            screen = QGuiApplication.primaryScreen()
+            if screen is not None:
+                pix = screen.grabWindow(0)
+                if not pix.isNull():
+                    # Scale down if very high resolution
+                    w, h = pix.width(), pix.height()
+                    if w > _IMG_MAX_W or h > _IMG_MAX_H:
+                        from PyQt6.QtCore import Qt as _Qt
+                        pix = pix.scaled(_IMG_MAX_W, _IMG_MAX_H, _Qt.AspectRatioMode.KeepAspectRatio, _Qt.TransformationMode.SmoothTransformation)
+                    buf = QByteArray()
+                    buffer = QBuffer(buf)
+                    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+                    pix.save(buffer, "JPEG", 70)
+                    return bytes(buf), "image/jpeg"
+    except Exception:
+        pass
 
-    if not _MSS:
-        raise RuntimeError("mss is not installed. Run: pip install mss")
+    # 2. MSS fallback
+    if _MSS:
+        try:
+            with mss.mss() as sct:
+                monitors = sct.monitors          # [0] = all combined, [1..n] = real screens
+                target   = monitors[1] if len(monitors) > 1 else monitors[0]
+                shot     = sct.grab(target)
+                png      = mss.tools.to_png(shot.rgb, shot.size)
+            return _compress(png, "PNG")
+        except Exception:
+            pass
 
-    with mss.mss() as sct:
-        monitors = sct.monitors          # [0] = all combined, [1..n] = real screens
-        target   = monitors[1] if len(monitors) > 1 else monitors[0]
-        shot     = sct.grab(target)
-        png      = mss.tools.to_png(shot.rgb, shot.size)
+    # 3. PIL fallback
+    if _PIL:
+        from PIL import ImageGrab
+        try:
+            img = ImageGrab.grab()
+            out = io.BytesIO()
+            img.convert("RGB").save(out, format="JPEG", quality=70)
+            return out.getvalue(), "image/jpeg"
+        except Exception:
+            pass
 
-    return _compress(png, "PNG")
+    raise RuntimeError("Screen capture unavailable on this system.")
 
 
 def _cv2_backend() -> int:

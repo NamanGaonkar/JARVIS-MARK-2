@@ -147,11 +147,15 @@ class MainWindow(QMainWindow):
     _quiz_hide_sig  = pyqtSignal()
     _review_sig     = pyqtSignal(str, str, object, object)  # document review payload
     _refresh_tasks_sig = pyqtSignal()                      # instant tasks & routines panel refresh
+    _vision_mode_sig   = pyqtSignal(str)                   # "camera" | "screen" | "off"
 
     def __init__(self, face_path: str):
         super().__init__()
         self._face_path = face_path
         self._refresh_tasks_sig.connect(self._refresh_tasks)
+        self._vision_mode: str = "off"
+        self.on_vision_mode_change = None
+        self._vision_mode_sig.connect(self._set_vision_mode)
 
         # Load customization from config
         _cfg = _read_full_config()
@@ -465,6 +469,10 @@ class MainWindow(QMainWindow):
 
         sc_mute = QShortcut(QKeySequence("F4"), self)
         sc_mute.activated.connect(self._toggle_mute)
+        sc_cam = QShortcut(QKeySequence("F6"), self)
+        sc_cam.activated.connect(self._toggle_cam_mode)
+        sc_screen = QShortcut(QKeySequence("F7"), self)
+        sc_screen.activated.connect(self._toggle_screen_mode)
         sc_movie = QShortcut(QKeySequence("F10"), self)
         sc_movie.activated.connect(self._toggle_movie_mode)
         sc_full = QShortcut(QKeySequence("F11"), self)
@@ -1226,6 +1234,87 @@ class MainWindow(QMainWindow):
         else:
             self.showFullScreen()
 
+    def _toggle_cam_mode(self):
+        """Toggle continuous camera vision stream."""
+        new_mode = "off" if getattr(self, "_vision_mode", "off") == "camera" else "camera"
+        self._set_vision_mode(new_mode)
+
+    def _toggle_screen_mode(self):
+        """Toggle continuous screen presentation vision stream."""
+        new_mode = "off" if getattr(self, "_vision_mode", "off") == "screen" else "screen"
+        self._set_vision_mode(new_mode)
+
+    def _set_vision_mode(self, mode: str):
+        """Apply vision mode ('camera', 'screen', 'off') and update UI buttons & status."""
+        mode = str(mode or "off").lower().strip()
+        if mode not in ("camera", "screen", "off"):
+            mode = "off"
+        self._vision_mode = mode
+
+        if mode == "camera":
+            self.start_camera_stream()
+        else:
+            self.stop_camera_stream()
+
+        # CAM button styling
+        if hasattr(self, "_cam_btn"):
+            if mode == "camera":
+                self._cam_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        color: #00ffcc; background: rgba(0, 255, 204, 0.20);
+                        border: 1px solid #00ffcc; border-radius: 4px; padding: 4px 8px; font-weight: bold;
+                    }}
+                    QPushButton:hover {{ background: rgba(0, 255, 204, 0.35); }}
+                """)
+            else:
+                self._cam_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        color: {C.PRI}; background: {C.PRI_GHO};
+                        border: 1px solid {C.BORDER_B}; border-radius: 4px; padding: 4px 8px;
+                    }}
+                    QPushButton:hover {{ background: {C.BORDER_A}; color: {C.WHITE}; }}
+                """)
+
+        # SCREEN button styling
+        if hasattr(self, "_screen_btn"):
+            if mode == "screen":
+                self._screen_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        color: #00e5ff; background: rgba(0, 229, 255, 0.22);
+                        border: 1px solid #00e5ff; border-radius: 4px; padding: 4px 8px; font-weight: bold;
+                    }}
+                    QPushButton:hover {{ background: rgba(0, 229, 255, 0.35); }}
+                """)
+            else:
+                self._screen_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        color: {C.PRI}; background: {C.PRI_GHO};
+                        border: 1px solid {C.BORDER_B}; border-radius: 4px; padding: 4px 8px;
+                    }}
+                    QPushButton:hover {{ background: {C.BORDER_A}; color: {C.WHITE}; }}
+                """)
+
+        # Controls drawer buttons
+        if hasattr(self, "_cam_ctrl_btn"):
+            self._cam_ctrl_btn.setText("CAM MODE: ON  [F6]" if mode == "camera" else "CAM MODE: OFF  [F6]")
+            self._cam_ctrl_btn.setStyleSheet(self._BTN_PRI if mode == "camera" else self._BTN_DIM)
+        if hasattr(self, "_screen_ctrl_btn"):
+            self._screen_ctrl_btn.setText("SCREEN MODE: ON  [F7]" if mode == "screen" else "SCREEN MODE: OFF  [F7]")
+            self._screen_ctrl_btn.setStyleSheet(self._BTN_PRI if mode == "screen" else self._BTN_DIM)
+
+        if mode == "camera":
+            self._log.append_log("SYS: CAM MODE active — continuous camera streaming enabled.")
+        elif mode == "screen":
+            self._log.append_log("SYS: SCREEN MODE active — live desktop screen presentation enabled.")
+        else:
+            self._log.append_log("SYS: Vision mode set to Regular.")
+
+        if self.on_vision_mode_change:
+            try:
+                self.on_vision_mode_change(mode)
+            except Exception as e:
+                print(f"[Vision] on_vision_mode_change error: {e}")
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._fit_side_columns()
@@ -1366,6 +1455,34 @@ class MainWindow(QMainWindow):
         clock_col.addWidget(self._date_lbl)
         lay.addLayout(clock_col)
         lay.addSpacing(6)
+        self._cam_btn = QPushButton("CAM")
+        self._cam_btn.setFont(hud_font(8, QFont.Weight.Bold))
+        self._cam_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._cam_btn.setStyleSheet(f"""
+            QPushButton {{
+                color: {C.PRI}; background: {C.PRI_GHO};
+                border: 1px solid {C.BORDER_B}; border-radius: 4px; padding: 4px 8px;
+            }}
+            QPushButton:hover {{ background: {C.BORDER_A}; color: {C.WHITE}; }}
+        """)
+        self._cam_btn.setToolTip("Toggle Continuous Camera Mode  [F6]")
+        self._cam_btn.clicked.connect(self._toggle_cam_mode)
+        lay.addWidget(self._cam_btn)
+        lay.addSpacing(2)
+        self._screen_btn = QPushButton("SCREEN")
+        self._screen_btn.setFont(hud_font(8, QFont.Weight.Bold))
+        self._screen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._screen_btn.setStyleSheet(f"""
+            QPushButton {{
+                color: {C.PRI}; background: {C.PRI_GHO};
+                border: 1px solid {C.BORDER_B}; border-radius: 4px; padding: 4px 8px;
+            }}
+            QPushButton:hover {{ background: {C.BORDER_A}; color: {C.WHITE}; }}
+        """)
+        self._screen_btn.setToolTip("Toggle Continuous Desktop Screen Presentation Mode  [F7]")
+        self._screen_btn.clicked.connect(self._toggle_screen_mode)
+        lay.addWidget(self._screen_btn)
+        lay.addSpacing(2)
         self._movie_btn = QPushButton("HUD")
         self._movie_btn.setFont(hud_font(8, QFont.Weight.Bold))
         self._movie_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1815,6 +1932,12 @@ class MainWindow(QMainWindow):
 
         fs_btn = _row(QPushButton("FULLSCREEN  [F11]"), self._BTN_DIM)
         fs_btn.clicked.connect(self._toggle_fullscreen)
+
+        self._cam_ctrl_btn = _row(QPushButton("CAM MODE: OFF  [F6]"), self._BTN_DIM)
+        self._cam_ctrl_btn.clicked.connect(self._toggle_cam_mode)
+
+        self._screen_ctrl_btn = _row(QPushButton("SCREEN MODE: OFF  [F7]"), self._BTN_DIM)
+        self._screen_ctrl_btn.clicked.connect(self._toggle_screen_mode)
 
         self._brief_btn = _row(QPushButton())
         self._brief_btn.clicked.connect(self._toggle_brief)
@@ -2400,7 +2523,7 @@ class MainWindow(QMainWindow):
     def _build_footer(self) -> QWidget:
         self._status_strip = StatusStrip()
         self._status_strip.set_right(
-            "F4 MUTE   ·   F10 MOVIE HUD   ·   F11 FULLSCREEN   ·   ESC INTERRUPT   ·   JARVIS MARK 2")
+            "F4 MUTE   ·   F6 CAM   ·   F7 SCREEN   ·   F10 HUD   ·   F11 FULLSCREEN   ·   JARVIS MARK 2")
         self._refresh_status_strip()
         return self._status_strip
 
