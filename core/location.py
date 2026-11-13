@@ -101,8 +101,8 @@ def pinpoint_location(query: str, save: bool = True) -> dict:
             "city": clean_q,
             "region": "Goa",
             "country": "India",
-            "lat": 15.5981,
-            "lon": 73.7722,
+            "lat": 15.4957,
+            "lon": 73.8262,
             "display_name": f"{clean_q}, Goa, India",
             "pinned": True,
         }
@@ -148,15 +148,15 @@ def get_location(refresh: bool = False) -> dict:
             except Exception:
                 pass
 
-        # Default to user's exact area (Assagao / Bardez, Goa)
+        # Default to user's real base location (Panjim, Goa)
         loc = {
-            "city": "Assagao",
+            "city": "Panjim",
             "region": "Goa",
             "country": "India",
-            "lat": 15.5981,
-            "lon": 73.7722,
+            "lat": 15.4957,
+            "lon": 73.8262,
             "isp": "",
-            "pinned": True,
+            "pinned": False,
         }
 
         try:
@@ -170,15 +170,25 @@ def get_location(refresh: bool = False) -> dict:
                     loc["city"] = data.get("city") or loc["city"]
                     loc["region"] = data.get("regionName") or loc["region"]
                     loc["country"] = data.get("country") or loc["country"]
-                    # If IP resolves to broad Panjim hub, keep Assagao if already near
-                    ip_lat = float(data.get("lat", loc["lat"]))
-                    ip_lon = float(data.get("lon", loc["lon"]))
-                    if data.get("city") != "Panjim":
-                        loc["lat"] = ip_lat
-                        loc["lon"] = ip_lon
+                    loc["lat"] = float(data.get("lat", loc["lat"]))
+                    loc["lon"] = float(data.get("lon", loc["lon"]))
                     loc["isp"] = data.get("isp") or ""
         except Exception:
-            pass
+            try:
+                req2 = urllib.request.Request(
+                    "https://ipinfo.io/json",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                with urllib.request.urlopen(req2, timeout=3.5) as resp2:
+                    d2 = json.loads(resp2.read().decode("utf-8"))
+                    loc["city"] = d2.get("city") or loc["city"]
+                    loc["region"] = d2.get("region") or loc["region"]
+                    if d2.get("loc"):
+                        plat, plon = map(float, d2["loc"].split(","))
+                        loc["lat"], loc["lon"] = plat, plon
+                    loc["isp"] = d2.get("org") or ""
+            except Exception:
+                pass
 
         lat, lon = loc["lat"], loc["lon"]
         loc["map_url"] = f"https://www.google.com/maps/@{lat:.4f},{lon:.4f},14z"

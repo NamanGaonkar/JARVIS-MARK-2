@@ -30,8 +30,8 @@ def get_current_location(parameters: dict = None, player=None, session_memory=No
         loc = pinpoint_location(query)
         city = loc.get("city", query)
         region = loc.get("region", "Goa")
-        lat = loc.get("lat", 15.5981)
-        lon = loc.get("lon", 73.7722)
+        lat = loc.get("lat", 15.4957)
+        lon = loc.get("lon", 73.8262)
         if player:
             player.write_log(f"[GPS] Location pinpointed: {city.upper()}, {region.upper()} ({lat:.4f} N, {lon:.4f} E)")
         return (
@@ -41,11 +41,11 @@ def get_current_location(parameters: dict = None, player=None, session_memory=No
         )
 
     loc = get_cached_or_fresh_location()
-    city = loc.get("city", "Assagao")
+    city = loc.get("city", "Panjim")
     region = loc.get("region", "Goa")
     country = loc.get("country", "India")
-    lat = loc.get("lat", 15.5981)
-    lon = loc.get("lon", 73.7722)
+    lat = loc.get("lat", 15.4957)
+    lon = loc.get("lon", 73.8262)
     coords_str = loc.get("coords_str", f"{lat:.4f}° N, {lon:.4f}° E")
     
     return (

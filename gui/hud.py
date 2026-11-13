@@ -121,7 +121,7 @@ class HudCanvas(QWidget):
             self._loc_info = get_location()
         except Exception:
             self._map_pixmap = None
-            self._loc_info = {"city": "Assagao", "region": "Goa", "label": "ASSAGAO, GOA", "lat": 15.5981, "lon": 73.7722, "coords_str": "15.5981° N, 73.7722° E"}
+            self._loc_info = {"city": "Panjim", "region": "Goa", "label": "PANJIM, GOA", "lat": 15.4957, "lon": 73.8262, "coords_str": "15.4957° N, 73.8262° E"}
 
         self._tick       = 0
         self._scale      = 1.0
@@ -269,8 +269,8 @@ class HudCanvas(QWidget):
             pan_x = getattr(self, "_map_pan_x", 0.0)
             pan_y = getattr(self, "_map_pan_y", 0.0)
             zoom = getattr(self, "_map_zoom", 1.0)
-            base_lat = float(self._loc_info.get("lat", 15.5981))
-            base_lon = float(self._loc_info.get("lon", 73.7722))
+            base_lat = float(self._loc_info.get("lat", 15.4957))
+            base_lon = float(self._loc_info.get("lon", 73.8262))
             cur_lat = base_lat - (pan_y / zoom) * 0.00035
             cur_lon = base_lon + (pan_x / zoom) * 0.00035
             open_live_map(cur_lat, cur_lon)
@@ -883,8 +883,8 @@ class HudCanvas(QWidget):
         pan_x = getattr(self, "_map_pan_x", 0.0)
         pan_y = getattr(self, "_map_pan_y", 0.0)
         zoom = getattr(self, "_map_zoom", 1.0)
-        base_lat = float(self._loc_info.get("lat", 15.5981))
-        base_lon = float(self._loc_info.get("lon", 73.7722))
+        base_lat = float(self._loc_info.get("lat", 15.4957))
+        base_lon = float(self._loc_info.get("lon", 73.8262))
         cur_lat = base_lat - (pan_y / zoom) * 0.00035
         cur_lon = base_lon + (pan_x / zoom) * 0.00035
         coords_txt = f"{abs(cur_lat):.4f}° {'N' if cur_lat >= 0 else 'S'}, {abs(cur_lon):.4f}° {'E' if cur_lon >= 0 else 'W'}"
