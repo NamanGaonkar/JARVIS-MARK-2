@@ -115,17 +115,13 @@ class HudCanvas(QWidget):
         self._map_pixmap: QPixmap | None = None
         try:
             from pathlib import Path
-            map_path = Path("config/tactical_map.png")
-            if map_path.exists():
-                self._map_pixmap = QPixmap(str(map_path))
-        except Exception:
-            self._map_pixmap = None
-
-        try:
-            from core.location import get_location
+            from core.location import MAP_FILE, get_location
+            if MAP_FILE.exists():
+                self._map_pixmap = QPixmap(str(MAP_FILE))
             self._loc_info = get_location()
         except Exception:
-            self._loc_info = {"city": "Panjim", "region": "Goa", "label": "PANJIM, GOA", "coords_str": "15.5016° N, 73.8234° E"}
+            self._map_pixmap = None
+            self._loc_info = {"city": "Assagao", "region": "Goa", "label": "ASSAGAO, GOA", "lat": 15.5981, "lon": 73.7722, "coords_str": "15.5981° N, 73.7722° E"}
 
         self._tick       = 0
         self._scale      = 1.0
@@ -256,14 +252,27 @@ class HudCanvas(QWidget):
         except Exception:
             pass
 
+    def reload_tactical_map(self):
+        """Reload location data and tactical map pixmap."""
+        try:
+            from core.location import MAP_FILE, get_location
+            self._loc_info = get_location()
+            if MAP_FILE.exists():
+                self._map_pixmap = QPixmap(str(MAP_FILE))
+            self.update()
+        except Exception as e:
+            print(f"[HUD] reload_tactical_map: {e}")
+
     def _open_map_redirect(self):
         try:
             from core.location import open_live_map
             pan_x = getattr(self, "_map_pan_x", 0.0)
             pan_y = getattr(self, "_map_pan_y", 0.0)
             zoom = getattr(self, "_map_zoom", 1.0)
-            cur_lat = 15.5016 - (pan_y / zoom) * 0.00035
-            cur_lon = 73.8234 + (pan_x / zoom) * 0.00035
+            base_lat = float(self._loc_info.get("lat", 15.5981))
+            base_lon = float(self._loc_info.get("lon", 73.7722))
+            cur_lat = base_lat - (pan_y / zoom) * 0.00035
+            cur_lon = base_lon + (pan_x / zoom) * 0.00035
             open_live_map(cur_lat, cur_lon)
             self.append_hud_log("MAP: Satellite navigation coordinates opened in browser.")
         except Exception as e:
@@ -874,9 +883,11 @@ class HudCanvas(QWidget):
         pan_x = getattr(self, "_map_pan_x", 0.0)
         pan_y = getattr(self, "_map_pan_y", 0.0)
         zoom = getattr(self, "_map_zoom", 1.0)
-        cur_lat = 15.5016 - (pan_y / zoom) * 0.00035
-        cur_lon = 73.8234 + (pan_x / zoom) * 0.00035
-        coords_txt = f"{cur_lat:.4f} N, {cur_lon:.4f} E"
+        base_lat = float(self._loc_info.get("lat", 15.5981))
+        base_lon = float(self._loc_info.get("lon", 73.7722))
+        cur_lat = base_lat - (pan_y / zoom) * 0.00035
+        cur_lon = base_lon + (pan_x / zoom) * 0.00035
+        coords_txt = f"{abs(cur_lat):.4f}° {'N' if cur_lat >= 0 else 'S'}, {abs(cur_lon):.4f}° {'E' if cur_lon >= 0 else 'W'}"
 
         p.setFont(px_font(8, QFont.Weight.Medium, mono=True))
         p.setPen(QPen(blend(C.PRI, 0.95)))
@@ -927,54 +938,6 @@ class HudCanvas(QWidget):
         p.drawText(self._loc_label_rect,
                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                    loc_label + " ↗")
-
-        # ── Bottom-Left Active Schedule & Timetable Widget ────────────────
-        sw, sh = 310.0, 116.0
-        sx = 24.0
-        sy_box = H - sh - 30.0
-        self._sched_rect = QRectF(sx, sy_box, sw, sh)
-
-        p.save()
-        p.setPen(QPen(blend(C.BORDER_B, 0.90), 1.2))
-        p.setBrush(QBrush(QColor(18, 10, 2, 230)))
-        p.drawRect(self._sched_rect)
-
-        # Top header
-        p.setFont(px_font(7, QFont.Weight.Bold, mono=True, spacing=1.2))
-        p.setPen(QPen(blend(C.PRI, 0.95)))
-        p.drawText(QRectF(sx + 8, sy_box + 5, sw - 16, 12), Qt.AlignmentFlag.AlignLeft, "ACTIVE SCHEDULE & TIMETABLE")
-
-        p.setPen(QPen(blend(C.BORDER, 0.50), 1.0))
-        p.drawLine(QLineF(sx + 8, sy_box + 20, sx + sw - 8, sy_box + 20))
-
-        # Rows of tasks
-        schedules = self._get_active_schedules()
-        f_item = px_font(7, QFont.Weight.Medium, mono=True)
-        p.setFont(f_item)
-        if schedules:
-            for idx, item_str in enumerate(schedules[:4]):
-                row_y = sy_box + 24.0 + idx * 17.0
-                p.setPen(QPen(blend(C.PRI, 0.85)))
-                p.drawText(QRectF(sx + 8, row_y, 10, 16), Qt.AlignmentFlag.AlignLeft, "•")
-                p.setPen(QPen(blend(C.TEXT, 0.90)))
-                trunc_sched = item_str[:42] + "..." if len(item_str) > 45 else item_str
-                p.drawText(QRectF(sx + 20, row_y, sw - 28, 16), Qt.AlignmentFlag.AlignLeft, trunc_sched)
-        else:
-            p.setPen(QPen(blend(C.TEXT_DIM, 0.75)))
-            p.drawText(QRectF(sx + 8, sy_box + 45, sw - 16, 16), Qt.AlignmentFlag.AlignCenter, "NO UPCOMING TASKS SCHEDULED")
-
-        # Bottom status indicator
-        p.setFont(px_font(6, QFont.Weight.Bold, mono=True, spacing=1.0))
-        p.setPen(QPen(blend(C.TEXT_DIM, 0.80)))
-        p.drawText(QRectF(sx + 8, sy_box + sh - 14, sw - 16, 12), Qt.AlignmentFlag.AlignRight, "LIVE TIMETABLE SYNC")
-        p.restore()
-
-        # Label beneath schedule box
-        p.setFont(px_font(8, QFont.Weight.Bold, mono=True, spacing=1.2))
-        p.setPen(QPen(blend(C.PRI, 0.95)))
-        p.drawText(QRectF(sx, sy_box + sh + 4, sw, 16),
-                   Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                   "SYSTEM CALENDAR & REMINDERS")
 
         # state line: spaced capitals between two fading rules that pulse
         if self.muted:

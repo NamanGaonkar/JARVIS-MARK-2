@@ -1432,13 +1432,37 @@ class JarvisLive:
         # Hardware & system context
         hw_ctx = ""
         try:
-            import psutil
-            ram_gb = round(psutil.virtual_memory().total / (1024**3), 1)
+            import psutil, winreg
+            vm = psutil.virtual_memory()
+            ram_tot_gb = round(vm.total / (1024**3), 1)
+            ram_used_gb = round(vm.used / (1024**3), 1)
+            model_name = "ASUS TUF Gaming F16 FX607VUR"
+            cpu_name = "Intel(R) Core(TM) 5 210H"
+            try:
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS") as k:
+                    model_name = winreg.QueryValueEx(k, "SystemProductName")[0]
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as k:
+                    cpu_name = winreg.QueryValueEx(k, "ProcessorNameString")[0].strip()
+            except Exception:
+                pass
+
+            bat_str = "AC Power Connected (Charging)"
+            bat = psutil.sensors_battery()
+            if bat:
+                stat = "Charging" if bat.power_plugged else "Discharging"
+                mins = f", approximately {round(bat.secsleft / 60)} minutes remaining" if bat.secsleft > 0 and not bat.power_plugged else ""
+                bat_str = f"{bat.percent}% [{stat}{mins}]"
+
             hw_ctx = (
-                f"[HOST WORKSTATION & ENVIRONMENT]\n"
-                f"System: {_platform.system()} {_platform.release()} ({_platform.machine()})\n"
-                f"RAM: {ram_gb} GB\n"
-                f"Status: You have direct local operating system integration and control on this machine.\n\n"
+                f"[HOST WORKSTATION & HARDWARE ARCHITECTURE]\n"
+                f"Workstation: {model_name} (Windows 11 Home 64-bit)\n"
+                f"CPU: {cpu_name} (12 cores @ 4.80 GHz)\n"
+                f"GPU: NVIDIA GeForce RTX 4050 Laptop GPU (6 GB VRAM) & Intel Graphics\n"
+                f"Memory: {ram_used_gb} GB used / {ram_tot_gb} GB total ({vm.percent}% load)\n"
+                f"Power Status: Battery at {bat_str}\n"
+                f"Display: 1920x1200 @ 144Hz\n"
+                f"Owner: Naman Gaonkar (Developer & Creator)\n"
+                f"Status: You possess full, unrestricted local workstation control, file management, coding automation, and terminal execution.\n\n"
             )
         except Exception:
             pass
@@ -2258,16 +2282,18 @@ class JarvisLive:
             stream.stop()
             stream.close()
 
-    # ── Morning briefing ────────────────────────────────────────────────────────
+    # ── Morning briefing & System Diagnostics ──────────────────────────────────
 
     async def _send_startup_briefing(self, options: dict | None = None) -> None:
         """
-        Two-phase briefing optimized for speed:
-          Phase 1 — instant greeting (no tools) → speech starts in <1s
-          Phase 2 — news pre-fetched in a background thread while Phase 1 plays,
-                    delivered as ready text (no Gemini tool-call round-trip) and
-                    shown on the UI content panel. Waits for turn_complete event
-                    instead of a fixed sleep so there is no unnecessary gap.
+        JARVIS System Startup Briefing & Diagnostics:
+          Phase 1 — Cinematic system diagnostic greeting:
+                    - Workstation status (ASUS TUF, nominal)
+                    - Battery level & power status (charging vs discharging reserve)
+                    - Time-aware recall of last night / past session
+                    - Immediate scheduled timetable tasks for today
+          Phase 2 — Background news pre-fetched and presented on the UI content
+                    panel silently, without interrupting voice dialogue unless requested.
         """
         memory   = load_memory()
         identity = memory.get("identity", {})
@@ -2278,17 +2304,28 @@ class JarvisLive:
 
         lang = _val("language")
         name = _val("name")
-        time_str = datetime.now().strftime("%H:%M")
+        now = datetime.now()
+        time_str = now.strftime("%H:%M")
 
-        # What the briefing covers is the routine's to say (core/routines): the
-        # news and its topic, and anything the user added to it. No options is
-        # the briefing as it always was.
+        # Hardware diagnostics
+        sys_diag = "All systems functional."
+        try:
+            import psutil
+            bat = psutil.sensors_battery()
+            if bat:
+                stat = "charging" if bat.power_plugged else "discharging"
+                mins_rem = f", approx {round(bat.secsleft / 60)} minutes remaining" if bat.secsleft > 0 and not bat.power_plugged else ""
+                sys_diag = f"Workstation nominal, battery at {bat.percent}% {stat}{mins_rem}."
+        except Exception:
+            pass
+
+        # Options
         options   = options or {}
         want_news = options.get("news", True) is not False
         topic     = str(options.get("news_topic") or "").strip() or "top world news today"
         extra     = str(options.get("extra") or "").strip()
 
-        # Start fetching news immediately — runs in parallel while phase 1 plays
+        # Start pre-fetching news quietly in background for UI display
         loop = asyncio.get_event_loop()
         news_future = (loop.run_in_executor(None, _fetch_news_sync, topic)
                        if want_news else None)
@@ -2297,35 +2334,80 @@ class JarvisLive:
         if not self.session:
             return
 
-        # ── Phase 1: instant greeting ─────────────────────────────────────────
-        # The briefing fires before the user has said anything, so the
-        # remembered language is the only signal there is. It is a starting
-        # point, not a setting: the moment they reply, their language wins.
+        # ── Phase 1: Sentient Diagnostic Greeting ────────────────────────────
         lang_clause = (f" Speak this greeting in {lang}, then follow the "
                        f"user's own language from their first reply onward."
                        if lang else "")
         name_clause = f" Address the user as {name}." if name else ""
 
-        # Inject last session context if available — pop removes it so it's never repeated
+        # Inject last session context with intelligent time-of-day awareness
         last = await asyncio.to_thread(pop_last_session)
         session_clause = ""
         if last:
             try:
-                _delta = (datetime.now() - datetime.strptime(last["date"], "%Y-%m-%d")).days
-                _when  = "earlier today" if _delta == 0 else ("yesterday" if _delta == 1 else f"{_delta} days ago")
+                last_ts = last.get("timestamp")
+                last_hour = last.get("hour")
+                if last_hour is None and "time" in last:
+                    try:
+                        last_hour = int(last["time"].split(":")[0])
+                    except Exception:
+                        pass
+
+                if last_ts:
+                    delta_hours = (now.timestamp() - float(last_ts)) / 3600.0
+                else:
+                    _d = (now - datetime.strptime(last["date"], "%Y-%m-%d")).days
+                    delta_hours = _d * 24.0
+
+                if (last_hour is not None and (last_hour >= 20 or last_hour <= 4)) and now.hour >= 5 and delta_hours < 20:
+                    _when = "last night"
+                elif delta_hours < 4:
+                    _when = "a short while ago"
+                elif now.date() == (datetime.fromtimestamp(last_ts).date() if last_ts else now.date()):
+                    _when = "earlier today"
+                elif delta_hours < 48 and (now.day - (datetime.fromtimestamp(last_ts).day if last_ts else now.day) in (1, -30, -29, -27)):
+                    _when = "yesterday"
+                else:
+                    _when = "in our previous session"
             except Exception:
-                _when = "last time"
+                _when = "last night" if (now.hour < 12 and now.hour >= 5) else "recently"
+
             session_clause = (
-                f" Also briefly and naturally mention that {_when}: {last['summary']}"
+                f" Briefly mention that {_when} you noted: {last['summary']}."
             )
 
+        # Check today's scheduled timetable tasks
+        sched_clause = ""
+        try:
+            from core.routines import desktop as r_desktop
+            r_eng = r_desktop.engine()
+            if r_eng:
+                today_weekday = now.isoweekday()  # 1=Mon ... 7=Sun
+                today_tasks = []
+                for r in r_eng.list():
+                    if r.get("builtin") in ("briefing", "checkin", "news_watch") or not r.get("enabled", True):
+                        continue
+                    trig = r.get("trigger", {})
+                    rule = trig.get("rule", {})
+                    if trig.get("type") == "time":
+                        days = rule.get("days", [])
+                        if not days or today_weekday in days:
+                            t_time = rule.get("time", "")
+                            today_tasks.append(f"{r.get('name') or r.get('text')} at {t_time}")
+                if today_tasks:
+                    sched_clause = f" Also confirm you have active on the schedule for today: {', '.join(today_tasks[:2])}."
+        except Exception:
+            pass
+
+        greeting_time = "Good morning" if 5 <= now.hour < 12 else ("Good afternoon" if 12 <= now.hour < 18 else "Good evening")
         p1 = (
-            f"Greet the user warmly, mention it is {time_str}"
-            f"{', and say you are fetching the news now' if want_news else ''}.{session_clause} "
-            f"Keep it to 2 short sentences max. Do not call any tools.{lang_clause}{name_clause}"
+            f"As JARVIS Mark II, deliver a sophisticated, poised startup greeting. "
+            f"Greet the user with '{greeting_time}', state core system diagnostics nominal and power status ({sys_diag})."
+            f"{session_clause}{sched_clause} "
+            f"State you are fully online and awaiting orders. "
+            f"Keep it to 2-3 crisp, natural sentences. Do not read external news headlines. Do not call any tools.{lang_clause}{name_clause}"
         )
 
-        # Clear the turn-done event so we can wait for Phase 1 to finish
         if self._turn_done_event:
             self._turn_done_event.clear()
 
@@ -2333,88 +2415,33 @@ class JarvisLive:
             turns={"role": "user", "parts": [{"text": p1}]},
             turn_complete=True,
         )
-        print("[JARVIS] Briefing phase 1 (greeting) sent.")
-        if not want_news and not extra:
-            return
+        print("[JARVIS] Startup diagnostic greeting sent.")
 
-        # ── Phase 2: fire as soon as Phase 1 audio is done ───────────────────
+        # ── Phase 2: Deliver news to UI content panel silently ───────────────
         async def _deliver_news():
             try:
-                lang_str = (f" Speak in {lang} unless the user has since "
-                            f"spoken another language, in which case use theirs."
-                            if lang else "")
-
-                # Wait for news fetch (already running) and Phase 1 turn-complete
-                # in parallel — whichever takes longer determines the wait time
-                news_done   = asyncio.wrap_future(news_future) if news_future else None
-                turn_waited = False
-                if self._turn_done_event:
-                    try:
-                        await asyncio.wait_for(self._turn_done_event.wait(), timeout=6.0)
-                        turn_waited = True
-                    except asyncio.TimeoutError:
-                        pass
-
-                # Extra buffer: turn_complete fires when Gemini finishes *generating*
-                # Phase 1, but audio may still be playing.  Waiting a beat here
-                # prevents Phase 2 audio from arriving while Phase 1 is mid-sentence
-                # (which sounds like a "repeated first response" to the user).
-                if turn_waited:
-                    await asyncio.sleep(0.8)
-                else:
-                    await asyncio.sleep(1.0)
-
-                news_text = ""
+                news_done = asyncio.wrap_future(news_future) if news_future else None
                 if news_done is not None:
                     try:
                         news_text = await asyncio.wait_for(news_done, timeout=8.0)
+                        if news_text and not news_text.startswith(("No news found", "Search failed")):
+                            # Show silently on workstation UI panel
+                            default_topic = topic == "top world news today"
+                            self.ui.show_content("NEWS — top world news today" if default_topic else "NEWS", news_text)
                     except Exception as e:
-                        self.ui.write_log(f"SYS: News fetch timed out/failed: {e!r}")
-                        news_text = ""
+                        print(f"[News] Background UI fetch: {e}")
 
-                if not self.session:
-                    return
-
-                extra_clause = (f"\n\nThen also do this, which the user asked to be part of "
-                                f"their briefing: {extra} — you may use tools for it."
-                                if extra else "")
-                no_tools = "" if extra else " Do not call any tools."
-
-                failed = (not news_text) or news_text.startswith(
-                    ("No news found", "Search failed", "Please provide")
-                )
-                if not want_news:
-                    p2 = (f"[BRIEFING] The user asked for this to be part of their briefing: "
-                          f"{extra} — do it now, using tools if it needs them.{lang_str}")
-                elif not failed:
-                    # Show on UI content panel immediately
-                    default_topic = topic == "top world news today"
-                    self.ui.show_content("NEWS — top world news today" if default_topic else "NEWS",
-                                         news_text)
-
-                    p2 = (
-                        f"[BRIEFING] Here are today's news headlines ({topic}):\n{news_text}\n\n"
-                        "Pick ONE headline, summarise it in one sentence, then say the full list "
-                        f"is displayed on screen.{no_tools}{extra_clause}{lang_str}"
+                if extra and self.session:
+                    # Only speak Phase 2 if user configured an explicit extra routine task
+                    lang_str = f" Speak in {lang}." if lang else ""
+                    p2 = (f"[SCHEDULED ROUTINE] The user asked for this action: "
+                          f"{extra} — execute it now using your tools.{lang_str}")
+                    await self.session.send_client_content(
+                        turns={"role": "user", "parts": [{"text": p2}]},
+                        turn_complete=True,
                     )
-                else:
-                    self.ui.write_log(
-                        f"SYS: News unavailable — backend returned: {news_text[:120]!r}"
-                    )
-                    p2 = (
-                        "News headlines could not be fetched right now. "
-                        f"Let the user know briefly.{extra_clause}{lang_str}"
-                    )
-
-                await self.session.send_client_content(
-                    turns={"role": "user", "parts": [{"text": p2}]},
-                    turn_complete=True,
-                )
-                print("[JARVIS] Briefing phase 2 (news) sent.")
             except Exception as e:
-                print(f"[Briefing] Phase 2 error: {e}")
-                print(f"[JARVIS] Briefing phase 2 failed: {e}")
-                self.ui.write_log("SYS: Could not fetch the news for the briefing.")
+                print(f"[Startup Briefing] Phase 2 error: {e}")
 
         self._keep_task(asyncio.create_task(_deliver_news()))
 

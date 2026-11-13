@@ -64,6 +64,11 @@ def _get_api_key() -> str:
 
 def _open_url(url: str) -> None:
     try:
+        if is_windows():
+            comet_exe = r"C:\Program Files\Perplexity\Comet\Application\comet.exe"
+            if os.path.exists(comet_exe):
+                subprocess.Popen([comet_exe, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
         if is_mac():
             subprocess.Popen(["open", url])
         elif is_linux():

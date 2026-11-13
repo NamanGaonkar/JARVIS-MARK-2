@@ -339,8 +339,9 @@ def reminder(
         return f"I couldn't register the reminder with the system scheduler.{phone}"
 
     if player:
-        player.write_log(f"[Reminder] ✅ {date_str} {time_str} — {safe_msg[:40]}")
+        player.write_log(f"[Reminder] {date_str} {time_str} — {safe_msg[:40]}")
         player.show_content("SCHEDULED REMINDER", f"Task: {safe_msg}\nTime: {friendly_time}")
+        player.refresh_tasks()
 
     friendly_time = target_dt.strftime("%B %d at %I:%M %p")
     return f"Reminder set for {friendly_time}.{phone}"

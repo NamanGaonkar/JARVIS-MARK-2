@@ -65,7 +65,8 @@ def routines(parameters: dict, player=None) -> str:
                         agent=a.get("agent") or "general", minutes=a.get("minutes") or 10,
                         quiet=a.get("quiet"))
             if player:
-                player.write_log(f"[Routines] ✅ Scheduled: {r['name']}")
+                player.write_log(f"[Routines] Scheduled: {r['name']}")
+                player.refresh_tasks()
                 all_rows = [_row(eng, item) for item in eng.list()]
                 player.show_content("SCHEDULED TIMETABLE", "\n".join(all_rows))
             return outcome.done("routines", id=r["id"], name=r["name"], when=eng.describe(r),
@@ -80,8 +81,19 @@ def routines(parameters: dict, player=None) -> str:
         if not rid and a.get("builtin"):
             found = eng.find_builtin(str(a["builtin"]).strip().lower())
             rid = found["id"] if found else ""
+        
+        # Name / keyword fuzzy match fallback
+        target_name = (a.get("name") or a.get("query") or a.get("text") or "").strip().lower()
+        if not rid and target_name:
+            for item in eng.list():
+                item_name = str(item.get("name") or "").lower()
+                item_text = str(item.get("text") or "").lower()
+                if target_name in item_name or target_name in item_text or item_name in target_name:
+                    rid = item["id"]
+                    break
+
         if not rid:
-            return outcome.failed("routines", "which routine? give its id (list shows them) or builtin")
+            return outcome.failed("routines", "which routine? give its id (list shows them), name, or builtin")
 
         if action == "update":
             fields = {k: a[k] for k in ("name", "text", "deliver", "agent", "minutes", "quiet", "enabled")
@@ -105,12 +117,19 @@ def routines(parameters: dict, player=None) -> str:
                     desktop.mirror_brief_switch(r["enabled"])
                 except Exception as e:
                     print(f"[Routines] MORNING BRIEF setting not updated: {e}")
+            if player:
+                player.refresh_tasks()
             return outcome.done("routines", id=r["id"], name=r["name"], enabled=r["enabled"],
                                 when=eng.describe(r), changed=",".join(fields))
 
         if action == "remove":
-            return (outcome.done("routines", removed=rid) if eng.remove(rid)
-                    else outcome.failed("routines", "no routine with that id"))
+            ok = eng.remove(rid)
+            if ok:
+                if player:
+                    player.write_log(f"[Routines] Removed routine: {rid}")
+                    player.refresh_tasks()
+                return outcome.done("routines", removed=rid)
+            return outcome.failed("routines", "no routine with that id")
 
         if action == "run_now":
             return outcome.done("routines", id=rid, result=eng.run_now(rid))

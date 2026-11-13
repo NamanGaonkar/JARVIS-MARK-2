@@ -89,10 +89,56 @@ def _desktop_search(app_name: str) -> bool:
         return False
 
 
-def _launch_windows(app_name: str) -> bool:
+def _snap_window(position: str) -> None:
+    """Snap the active window to a screen position (left, right, max, min)."""
+    if not position:
+        return
+    pos = position.lower().strip()
+    time.sleep(0.9)
+    try:
+        if _PYAUTOGUI:
+            if pos in ("left", "half-left"):
+                pyautogui.hotkey("win", "left")
+            elif pos in ("right", "half-right"):
+                pyautogui.hotkey("win", "right")
+            elif pos in ("max", "maximize", "full", "up"):
+                pyautogui.hotkey("win", "up")
+            elif pos in ("min", "minimize", "down"):
+                pyautogui.hotkey("win", "down")
+    except Exception as e:
+        print(f"[open_app] snap window error: {e}")
+
+
+def _launch_windows(app_name: str, url: str | None = None) -> bool:
     """Launch an application or open a folder on Windows reliably."""
     name_clean = app_name.strip()
     name_lower = name_clean.lower()
+
+    # Special handling for Perplexity Comet Browser
+    if "comet" in name_lower:
+        comet_paths = [
+            r"C:\Program Files\Perplexity\Comet\Application\comet.exe",
+            r"C:\Program Files (x86)\Perplexity\Comet\Application\comet.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Perplexity\Comet\Application\comet.exe"),
+        ]
+        for cp in comet_paths:
+            if os.path.exists(cp):
+                args = [cp]
+                if url:
+                    args.append(url)
+                subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return True
+
+    # Special handling for Windows Terminal
+    if name_lower in ("terminal", "windows terminal", "wt"):
+        wt_path = (
+            shutil.which("wt")
+            or os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe")
+            or shutil.which("powershell")
+        )
+        if wt_path and os.path.exists(str(wt_path)):
+            subprocess.Popen([str(wt_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
 
     # 1. Known special folders & Explorer navigation
     folder_aliases = {
@@ -137,8 +183,11 @@ def _launch_windows(app_name: str) -> bool:
     resolved = shutil.which(name_clean) or shutil.which(f"{name_clean}.exe")
     if resolved:
         try:
+            args = [resolved]
+            if url:
+                args.append(url)
             subprocess.Popen(
-                [resolved],
+                args,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -160,8 +209,11 @@ def _launch_windows(app_name: str) -> bool:
                     with winreg.OpenKey(root_key, sub_key) as key:
                         app_path, _ = winreg.QueryValueEx(key, "")
                         if app_path and os.path.exists(app_path):
+                            args = [app_path]
+                            if url:
+                                args.append(url)
                             subprocess.Popen(
-                                [app_path],
+                                args,
                                 stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL,
                             )
@@ -171,7 +223,15 @@ def _launch_windows(app_name: str) -> bool:
     except Exception as exc:
         print(f"[open_app] Registry lookup error: {exc}")
 
-    # 4. URI Scheme (e.g. ms-settings:, spotify:)
+    # 4. If URL given and generic browser requested, use default browser with URL
+    if url:
+        try:
+            webbrowser.open(url)
+            return True
+        except Exception:
+            pass
+
+    # 5. URI Scheme (e.g. ms-settings:, spotify:)
     scheme, _, rest = name_clean.partition(":")
     if rest and scheme and scheme.isalnum() and len(scheme) > 1:
         try:
@@ -309,25 +369,31 @@ def _say(player, instruction: str) -> None:
 #  Launch + verify, off the conversation's thread
 # ─────────────────────────────────────────────────────────────────────────────
 def _launch_and_verify(player, spoken: str, launcher_name: str,
-                       before: set[int]) -> None:
-    """The part that takes seconds. Speaks ONLY when something needs saying.
-
-    Silence means it worked: the window is on the user's screen and a second
-    announcement over the top of it is noise — the same reasoning
-    whatsapp_call.py applies to a phone that is already ringing.
-    """
+                       before: set[int], position: str | None = None,
+                       url: str | None = None) -> None:
+    """The part that takes seconds. Speaks ONLY when something needs saying."""
     try:
         launcher = _LAUNCHERS[_SYSTEM]
-        requested = launcher(launcher_name)
-        if not requested and launcher_name.lower() != spoken.lower():
-            requested = launcher(spoken)
+        if _SYSTEM == "Windows":
+            requested = launcher(launcher_name, url=url)
+            if not requested and launcher_name.lower() != spoken.lower():
+                requested = launcher(spoken, url=url)
+        else:
+            requested = launcher(launcher_name)
+            if not requested and launcher_name.lower() != spoken.lower():
+                requested = launcher(spoken)
 
         appeared = appidentity.wait_for_launch(
             spoken, before, timeout=_LAUNCH_TIMEOUT
         )
         if appeared is not None:
             _log(player, f"JARVIS: {appeared.label} is open.")
+            if position:
+                _snap_window(position)
             return
+
+        if requested and position:
+            _snap_window(position)
 
         if not requested:
             trouble = (f"{spoken} could not be started - nothing on this system "
@@ -352,7 +418,11 @@ def _launch_and_verify(player, spoken: str, launcher_name: str,
 # ─────────────────────────────────────────────────────────────────────────────
 def open_app(parameters=None, response=None, player=None,
              session_memory=None) -> str:
-    spoken = ((parameters or {}).get("app_name") or "").strip()
+    params = parameters or {}
+    spoken = (params.get("app_name") or "").strip()
+    position = (params.get("position") or "").strip()
+    url = (params.get("url") or "").strip()
+
     if not spoken:
         return outcome.failed("open_app", "no application name was given")
 
@@ -362,72 +432,37 @@ def open_app(parameters=None, response=None, player=None,
             app=spoken,
         )
 
-    # Already open? Then there is nothing to launch and nothing to wait for,
-    # and saying so is more useful than a second copy. This is also the one
-    # branch that can answer `done` immediately, because the evidence is
-    # already in hand rather than somewhere in the next ten seconds.
-    #
-    # include_self, unlike the close path, and for the opposite reason. There
-    # the assistant's own processes must never be a TARGET; here the question
-    # is only "is this already running", and it is already running whether the
-    # process belongs to us or not. Without this, asking to open the very
-    # application the assistant lives inside reports `started` and goes off to
-    # launch a second copy of it — seen exactly that way, against a packaged
-    # build whose siblings the close guard had just learnt to protect.
+    # Format shorthand URLs (e.g. "mr beast youtube" -> channel URL)
+    if url:
+        url_lower = url.lower()
+        if "mr beast" in url_lower or "mrbeast" in url_lower:
+            url = "https://www.youtube.com/@MrBeast"
+        elif not url.startswith(("http://", "https://")):
+            url = f"https://{url}"
+
     existing = appidentity.running(spoken, include_self=True)
     if existing:
         best = existing[0]
-        # ALREADY RUNNING IS NOT ALREADY DONE.
-        #
-        # This branch used to report "it was already open" and stop. That is
-        # true and useless: an application running behind three other windows
-        # is not on the user's screen, nothing changed when they asked, and
-        # from where they are sitting the assistant did not open anything.
-        # Reported as a bug in exactly those words — "it does not even open
-        # applications" — with WhatsApp and Edge both running in the tray.
-        #
-        # Clicking a taskbar icon for a running app raises its window. So does
-        # this. When there is no window to raise — a background service, or an
-        # app that has gone to the tray — focus() says so and the launcher runs
-        # below, which is what brings a tray app back.
-        # Try every candidate, not just the best-scoring one.
-        #
-        # A modern application is many processes and only one of them owns the
-        # window. Ranking puts the exact name match first, and on Windows that
-        # is routinely a background service: measured here, `WhatsApp` and
-        # `msedge` both scored 100 on processes with no window at all, so
-        # focusing "the best match" focused nothing and the branch gave up.
-        #
-        # Store apps are the harder half of the same thing — their window
-        # belongs to ApplicationFrameHost, not to the app's own process — which
-        # is why failing all of these falls through to the launcher rather than
-        # reporting failure. Typing the name into the Start Menu raises a
-        # running Store app, and that is the path that ends up serving them.
         for candidate in existing[:8]:
             if appidentity.focus(candidate):
                 _log(player, f"JARVIS: {candidate.label} brought to the front.")
+                if position:
+                    _snap_window(position)
                 return outcome.done(
                     "open_app", app=spoken, matched=candidate.label,
                     already_running=True, focused=True, verified=True,
                 )
-        print(f"[open_app] {best.label} is running but no window could be "
-              f"raised — launching it instead, which is what brings back an "
-              f"app that is only in the tray.")
 
     launcher_name = appidentity.launcher_name(spoken)
     before = appidentity.snapshot()
-    _log(player, f"JARVIS: Opening {spoken}…")
+    _log(player, f"JARVIS: Opening {spoken}{' on ' + position if position else ''}…")
 
     threading.Thread(
         target=_launch_and_verify,
-        args=(player, spoken, launcher_name, before),
+        args=(player, spoken, launcher_name, before, position, url),
         daemon=True, name=f"open-app-{spoken[:20]}",
     ).start()
 
-    # Facts, not a sentence. Handing the model a finished English sentence is
-    # an invitation to repeat it verbatim — whatsapp_call.py has the receipt:
-    # a request made in Turkish came back in English, padded with an offer
-    # nobody had made. The model writes the sentence, in the user's language.
     return outcome.started("open_app", app=spoken)
 
 
@@ -435,23 +470,10 @@ def open_app(parameters=None, response=None, player=None,
 TOOL = {
     "name": "open_app",
     "description": (
-        "Opens an application on this computer. Use whenever the user asks to "
-        "open, launch or start any app or program. Put the application's name "
-        "in 'app_name' exactly as the user said it. "
-        "This tool answers immediately and confirms the launch in the "
-        "background: on status=started say only that it is opening, never that "
-        "it is open. If it does not appear, you will be told separately - "
-        "relay that plainly rather than claiming success. Never say you opened "
-        "something without calling this tool. "
-        "To CLOSE an application use computer_control with action='close_app', "
-        "not this tool. "
-        "DO NOT use this tool to reach a WEB PAGE. 'open Chrome and go to "
-        "YouTube', 'open YouTube', 'search the web' are all browser_control "
-        "alone - it opens the browser itself. Calling open_app for the browser "
-        "first and browser_control after it launches the browser TWICE, the "
-        "second copy on a different profile, which is what puts a 'Who's using "
-        "Chrome?' picker on the screen. Use this tool only when the user wants "
-        "the application and nothing in it."
+        "Opens an application on this computer, with optional window snapping ('left', 'right', 'maximize') "
+        "and optional URL target. Use for any program: 'open comet browser on left', 'open terminal on right', "
+        "'open comet with mr beast youtube channel'. Put the application's name in 'app_name'. "
+        "To CLOSE an application use computer_control with action='close_app'."
     ),
     "parameters": {
         "type": "OBJECT",
@@ -459,13 +481,16 @@ TOOL = {
             "app_name": {
                 "type": "STRING",
                 "description": (
-                    "The application's REAL name, not the user's shorthand. "
-                    "Expand abbreviations and nicknames before passing them: "
-                    "'wp' or 'whats' is 'WhatsApp', 'ig' is 'Instagram', 'vs "
-                    "code' is 'Visual Studio Code'. A two-letter fragment "
-                    "matches the wrong program - 'wp' finds WPS Office. Any "
-                    "application on the machine works; there is no fixed list."
+                    "The application's name (e.g. 'comet', 'terminal', 'chrome', 'spotify', 'vs code')."
                 ),
+            },
+            "position": {
+                "type": "STRING",
+                "description": "Optional window position to snap: 'left', 'right', 'maximize', 'minimize', 'top-left', 'top-right'."
+            },
+            "url": {
+                "type": "STRING",
+                "description": "Optional URL or channel to open directly in the browser (e.g. 'https://www.youtube.com/@MrBeast')."
             }
         },
         "required": ["app_name"],

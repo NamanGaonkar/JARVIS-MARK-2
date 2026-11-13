@@ -117,10 +117,12 @@ class MainWindow(QMainWindow):
     _quiz_sig       = pyqtSignal(str, object, object)  # (topic, questions, grader)
     _quiz_hide_sig  = pyqtSignal()
     _review_sig     = pyqtSignal(str, str, object, object)  # document review payload
+    _refresh_tasks_sig = pyqtSignal()                      # instant tasks & routines panel refresh
 
     def __init__(self, face_path: str):
         super().__init__()
         self._face_path = face_path
+        self._refresh_tasks_sig.connect(self._refresh_tasks)
 
         # Load customization from config
         _cfg = _read_full_config()
@@ -1614,22 +1616,53 @@ class MainWindow(QMainWindow):
         if getattr(self, "_tasks_stack", None) is not None and self._tasks_stack.currentIndex() == 1:
             self._refresh_routines()
             return
+        import time as _time
         try:
             from core.tasks import desktop
             eng = desktop.engine()
             tasks = eng.list(12) if eng else []
         except Exception:
             tasks = []
-        active = [t for t in tasks if t["status"] in ("running", "waiting_quota", "queued", "scheduled")]
-        shown = (active + [t for t in tasks if t not in active])[:len(self._task_rows)]
+        
+        # Include active scheduled timetable items & routines
+        sched_items = []
+        try:
+            from core.routines import desktop as r_desktop
+            r_eng = r_desktop.engine()
+            if r_eng:
+                for r in r_eng.list():
+                    if r.get("builtin") in ("briefing", "checkin", "news_watch"):
+                        continue
+                    if not r.get("enabled", True):
+                        continue
+                    when_txt = r_eng.describe(r)
+                    if r.get("trigger", {}).get("type") == "time" and r.get("next_ts"):
+                        when_txt = _time.strftime('%a %H:%M', _time.localtime(r['next_ts']))
+                    sched_items.append({
+                        "id": r["id"],
+                        "title": r.get("name") or r.get("text") or "Scheduled Routine",
+                        "status": "scheduled",
+                        "used": {"seconds": 0, "rounds": 0},
+                        "budget": {"minutes": r.get("minutes", 10)},
+                        "events": [{"text": f"[{when_txt.upper()}] Timetable item", "kind": "progress"}],
+                    })
+        except Exception:
+            pass
+
+        active_tasks = [t for t in tasks if t["status"] in ("running", "waiting_quota", "queued", "scheduled")]
+        all_active = active_tasks + sched_items
+        shown = (all_active + [t for t in tasks if t not in active_tasks])[:len(self._task_rows)]
         for i, row in enumerate(self._task_rows):
             task = shown[i] if i < len(shown) else None
             row.set_task(task)
             row.setVisible(task is not None)
         self._tasks_empty.setVisible(not shown)
-        self._tasks_panel.set_code(f"{len(active)} ACTIVE" if active else "")
+        self._tasks_panel.set_code(f"{len(all_active)} ACTIVE" if all_active else "")
 
     def _open_task(self, tid: str) -> None:
+        if str(tid).startswith("r"):
+            self._open_routine(tid)
+            return
         try:
             from core.tasks import desktop
             eng = desktop.engine()

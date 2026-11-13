@@ -437,9 +437,13 @@ def save_session_summary(summary: str, language: str = "") -> None:
     sessions = memory.get("sessions", [])
     if not isinstance(sessions, list):
         sessions = []
+    now = datetime.now()
     entry: dict = {
-        "date":    datetime.now().strftime("%Y-%m-%d"),
-        "summary": summary[:280],
+        "date":      now.strftime("%Y-%m-%d"),
+        "time":      now.strftime("%H:%M"),
+        "hour":      now.hour,
+        "timestamp": now.timestamp(),
+        "summary":   summary[:280],
     }
     if language:
         entry["language"] = language
@@ -451,7 +455,7 @@ def save_session_summary(summary: str, language: str = "") -> None:
             json.dumps(memory, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
-    print(f"[Memory] 📝 Session saved ({entry['date']}): {summary[:60]}…")
+    print(f"[Memory] 📝 Session saved ({entry['date']} {entry['time']}): {summary[:60]}…")
 
 
 def pop_last_session() -> dict | None:

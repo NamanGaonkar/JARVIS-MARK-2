@@ -258,6 +258,10 @@ class JarvisUI:
     def write_log(self, text: str):
         self._win._log_sig.emit(text)
 
+    def refresh_tasks(self) -> None:
+        """Thread-safe: trigger instant refresh of tasks and routines panel."""
+        self._win._refresh_tasks_sig.emit()
+
     def wait_for_api_key(self):
         while not self._win._ready:
             time.sleep(0.1)

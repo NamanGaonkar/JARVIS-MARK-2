@@ -644,6 +644,24 @@ def computer_control(
         if action == "focus_window":
             return _focus_window(params.get("title", ""))
 
+        if action in ("snap_window", "arrange_window"):
+            pos = (params.get("direction") or params.get("text") or "left").lower().strip()
+            title = (params.get("title") or params.get("app_name") or "").strip()
+            if title:
+                _focus_window(title)
+                time.sleep(0.3)
+            if _PYAUTOGUI:
+                if pos in ("left", "half-left"):
+                    pyautogui.hotkey("win", "left")
+                elif pos in ("right", "half-right"):
+                    pyautogui.hotkey("win", "right")
+                elif pos in ("up", "max", "maximize", "full"):
+                    pyautogui.hotkey("win", "up")
+                elif pos in ("down", "min", "minimize"):
+                    pyautogui.hotkey("win", "down")
+                return f"Window snapped to {pos}"
+            return "pyautogui not available to snap window"
+
         if action in ("close_app", "close_application", "quit_app"):
             return _close_app(
                 params.get("app_name") or params.get("text") or "",
@@ -698,7 +716,7 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | focus_window | close_app | screen_find | screen_click | random_data | user_data"
+                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | focus_window | snap_window | close_app | screen_find | screen_click | random_data | user_data"
             },
             "app_name": {
                 "type": "STRING",
