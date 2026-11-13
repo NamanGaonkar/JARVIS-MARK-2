@@ -141,7 +141,7 @@ def save_assistant_config(assistant_name: str, user_name: str) -> None:
     _write_config(data)
 
 
-APP_VERSION = "2.0.9"
+APP_VERSION = "2.1.0"
 
 
 @_locked
@@ -158,8 +158,9 @@ def check_and_update_version_upgrade() -> str | None:
         return (
             f"[SYSTEM UPDATE NOTICE - VERSION {APP_VERSION}]\n"
             f"JARVIS has just been upgraded to Mark II Version {APP_VERSION}. "
-            f"Key upgrades applied: decoupled model-agnostic coding engine, deep vocal resonance profiles, "
-            f"smart sustained voice interruption (anti-noise barge-in), and expanded persistent memory retention. "
+            f"Key upgrades applied: Picture-in-Picture floating mini core mode (press F9 or PIP button to float on top of other apps), "
+            f"permanent session chat history archiving with cross-session recall and continuity, "
+            f"and rock-solid smooth continuous speech without mic interruption cutoffs or stalls. "
             f"In your very first turn or response this session, acknowledge this upgrade warmly and smoothly "
             f"to the user (e.g. 'Systems upgraded and online, sir. Running Mark II Version {APP_VERSION}. How may I serve you today?')."
         )

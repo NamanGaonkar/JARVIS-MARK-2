@@ -411,9 +411,145 @@ def forget(key: str, category: str = "notes") -> str:
 forget_memory = forget
 
 
-# ── Session memory ─────────────────────────────────────────────────────────────
+# ── Session memory & Permanent Chat History ───────────────────────────────────
 
-_SESSION_MAX = 3   # safety cap — in practice 0-1 entries after pop
+_SESSION_MAX = 50  # Keep up to 50 recent session summaries in long_term.json
+SESSIONS_DIR = BASE_DIR / "memory" / "sessions"
+
+
+def archive_session(turns: list[str], summary: str = "", language: str = "") -> str:
+    """Permanently archive the complete conversation transcript of a session to disk."""
+    if not turns:
+        return ""
+    try:
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        now = datetime.now()
+        ts = int(now.timestamp())
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H:%M:%S")
+        filename = f"session_{ts}_{now.strftime('%Y%m%d_%H%M%S')}.json"
+        filepath = SESSIONS_DIR / filename
+
+        msgs = []
+        for turn in turns:
+            if isinstance(turn, str):
+                if turn.startswith("User:"):
+                    msgs.append({"speaker": "User", "text": turn[5:].strip()})
+                elif ":" in turn:
+                    parts = turn.split(":", 1)
+                    msgs.append({"speaker": parts[0].strip(), "text": parts[1].strip()})
+                else:
+                    msgs.append({"speaker": "System", "text": turn.strip()})
+            elif isinstance(turn, dict):
+                msgs.append(turn)
+
+        data = {
+            "session_id": f"{date_str}_{ts}",
+            "date": date_str,
+            "time": time_str,
+            "timestamp": now.timestamp(),
+            "summary": summary[:400] if summary else "",
+            "language": language or "English",
+            "turn_count": len(msgs),
+            "messages": msgs,
+        }
+
+        with _lock:
+            filepath.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"[Memory] 💾 Full session transcript archived ({len(msgs)} turns) -> {filename}")
+        return str(filepath)
+    except Exception as e:
+        print(f"[Memory] ⚠️ Failed to archive session transcript: {e}")
+        return ""
+
+
+def search_chat_history(query: str, max_turns: int = 8) -> str:
+    """Search across all archived past session transcripts for matching topics, keywords, or discussions."""
+    query = (query or "").strip().lower()
+    if not query:
+        return "Please provide a keyword or topic to search past sessions."
+    words = [w for w in re.split(r"[^\w]+", query) if len(w) > 1]
+    if not words:
+        words = [query]
+
+    try:
+        if not SESSIONS_DIR.exists():
+            return f"No archived session history found for '{query}'."
+        files = sorted(SESSIONS_DIR.glob("session_*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if not files:
+            return f"No archived session history found for '{query}'."
+
+        matched_results = []
+        for fpath in files[:30]:  # check up to 30 past sessions
+            try:
+                data = json.loads(fpath.read_text(encoding="utf-8"))
+                date_str = data.get("date", "Unknown date")
+                time_str = data.get("time", "")
+                summary = data.get("summary", "")
+                messages = data.get("messages", [])
+
+                summary_match = any(w in summary.lower() for w in words)
+
+                matching_turns = []
+                for idx, msg in enumerate(messages):
+                    speaker = msg.get("speaker", "Unknown")
+                    text = msg.get("text", "")
+                    if any(w in text.lower() for w in words):
+                        if idx > 0:
+                            prev_text = messages[idx - 1]["text"]
+                            prev_spk = messages[idx - 1]["speaker"]
+                            matching_turns.append(f"{prev_spk}: {prev_text}\n{speaker}: {text}")
+                        else:
+                            matching_turns.append(f"{speaker}: {text}")
+
+                if summary_match or matching_turns:
+                    head = f"📅 Session on {date_str} at {time_str}"
+                    if summary:
+                        head += f" (Summary: {summary})"
+                    content = "\n---\n".join(matching_turns[:3]) if matching_turns else "Discussed topic in session."
+                    matched_results.append(f"{head}\n{content}")
+                    if len(matched_results) >= max_turns:
+                        break
+            except Exception:
+                continue
+
+        if not matched_results:
+            return f"No past conversations found matching '{query}'."
+
+        return f"Found {len(matched_results)} past conversation matches for '{query}':\n\n" + "\n\n====================\n\n".join(matched_results)
+    except Exception as e:
+        return f"Error searching chat history: {e}"
+
+
+def get_past_sessions_context(limit: int = 5) -> str:
+    """Format a concise briefing of recent past sessions for prompt injection."""
+    memory = load_memory()
+    sessions = memory.get("sessions", [])
+    if not isinstance(sessions, list) or not sessions:
+        if SESSIONS_DIR.exists():
+            files = sorted(SESSIONS_DIR.glob("session_*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+            loaded = []
+            for fp in files[:limit]:
+                try:
+                    d = json.loads(fp.read_text(encoding="utf-8"))
+                    if d.get("summary"):
+                        loaded.append(f"- {d.get('date')} ({d.get('time')}): {d.get('summary')}")
+                except Exception:
+                    pass
+            if loaded:
+                return "[RECENT PAST SESSIONS CONVERSATION CONTINUITY]\n" + "\n".join(loaded) + "\n\n"
+        return ""
+
+    lines = []
+    for s in reversed(sessions[-limit:]):
+        d = s.get("date", "")
+        t = s.get("time", "")
+        sm = s.get("summary", "")
+        if sm:
+            lines.append(f"- {d} ({t}): {sm}")
+    if not lines:
+        return ""
+    return "[RECENT PAST SESSIONS CONVERSATION CONTINUITY]\n" + "\n".join(lines) + "\n\n"
 
 
 def save_session_summary(summary: str, language: str = "") -> None:
@@ -431,7 +567,8 @@ def save_session_summary(summary: str, language: str = "") -> None:
         "time":      now.strftime("%H:%M"),
         "hour":      now.hour,
         "timestamp": now.timestamp(),
-        "summary":   summary[:280],
+        "summary":   summary[:350],
+        "briefed":   False,
     }
     if language:
         entry["language"] = language
@@ -448,8 +585,8 @@ def save_session_summary(summary: str, language: str = "") -> None:
 
 def pop_last_session() -> dict | None:
     """
-    Return AND remove the most recent session entry.
-    Calling this consumes the entry so it is never repeated in future briefings.
+    Return the most recent session entry for morning briefing.
+    Does NOT destroy historical records; marks briefed=True so it's only briefed once.
     """
     with _lock:
         if not MEMORY_PATH.exists():
@@ -459,13 +596,15 @@ def pop_last_session() -> dict | None:
             sessions = memory.get("sessions", [])
             if not isinstance(sessions, list) or not sessions:
                 return None
-            entry = sessions.pop()          # remove the last entry
-            memory["sessions"] = sessions
-            MEMORY_PATH.write_text(
-                json.dumps(memory, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            return entry
+            for s in reversed(sessions):
+                if not s.get("briefed"):
+                    s["briefed"] = True
+                    MEMORY_PATH.write_text(
+                        json.dumps(memory, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                    return s
+            return None
         except Exception as e:
             print(f"[Memory] ⚠️ pop_last_session error: {e}")
             return None

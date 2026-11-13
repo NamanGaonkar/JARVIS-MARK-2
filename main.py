@@ -533,6 +533,42 @@ TOOL_DECLARATIONS = [
         },
     },
     {
+        "name": "recall_chat_history",
+        "description": (
+            "Search past conversation sessions and chat history across previous days and sessions. "
+            "Use when the user asks: 'what did we talk about yesterday?', 'do you remember our chat about X?', "
+            "'recall what I said last session', or asks to retrieve ideas, details, or decisions from earlier sessions. "
+            "This performs an instant local search over all archived session transcripts."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query": {
+                    "type": "STRING",
+                    "description": "Keywords, topic, date, or subject to search past conversation sessions."
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "toggle_pip_mode",
+        "description": (
+            "Switch between the full application window and Picture-in-Picture (PiP) floating mini core mode. "
+            "Use when the user asks to minimize to core, picture-in-picture, float on top, or restore the full window."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "enable": {
+                    "type": "BOOLEAN",
+                    "description": "True to enter Picture-in-Picture mode; False to restore full application window."
+                }
+            },
+            "required": ["enable"]
+        }
+    },
+    {
         "name": "undo",
         "description": (
             "Reverse the last change YOU made to this computer — a file you "
@@ -1553,6 +1589,13 @@ class JarvisLive:
         if mem_str:
             parts.append(mem_str)
         try:
+            from memory.memory_manager import get_past_sessions_context
+            past_sessions_ctx = get_past_sessions_context(limit=6)
+            if past_sessions_ctx:
+                parts.append(past_sessions_ctx)
+        except Exception:
+            pass
+        try:
             from memory.config_manager import check_and_update_version_upgrade
             upgrade_ctx = check_and_update_version_upgrade()
             if upgrade_ctx:
@@ -1698,6 +1741,17 @@ class JarvisLive:
                 # hundred short strings, and a thread hop would cost more than
                 # the work itself.
                 result = search_memory(args.get("query", ""), limit=8)
+
+            elif name == "recall_chat_history":
+                from memory.memory_manager import search_chat_history
+                result = await loop.run_in_executor(
+                    None, search_chat_history, args.get("query", ""), 6
+                )
+
+            elif name == "toggle_pip_mode":
+                enable = bool(args.get("enable", True))
+                self.ui.set_pip(enable)
+                result = f"Switched to {'Picture-in-Picture floating mini core' if enable else 'Full Application window'}."
 
             elif name == "undo":
                 if str(args.get("action", "")).lower().strip() == "list":
@@ -1906,55 +1960,14 @@ class JarvisLive:
                     det.feed(indata)
                 return
 
-            raw_bytes = indata.tobytes()
-            preroll = getattr(self, "_mic_preroll", None)
-            if preroll is not None:
-                preroll.append(raw_bytes)
-                if len(preroll) > 4:
-                    preroll.pop(0)
-
             with self._speaking_lock:
                 jarvis_speaking = self._is_speaking
 
-            # ── Real-Time Conversational Barge-in ─────────────────────────────
-            # While JARVIS is speaking, detect when the user speaks naturally to interrupt.
-            # - Conversational level threshold (lvl >= 0.04)
-            # - Echo subtraction (must not match assistant's speaker output)
-            # - 2 consecutive frames (~128 ms): filters out transient clicks/taps
+            # While JARVIS is speaking, microphone input is held closed:
+            # Prevents speaker echo, mid-sentence audio cutoffs, hallucinations,
+            # and stall loops. Speech stays completely smooth and rock-solid.
             if jarvis_speaking:
-                try:
-                    lvl = _pcm_level(indata)
-                    if lvl >= 0.04 and self._echo.is_user_speech(indata, SEND_SAMPLE_RATE, lvl):
-                        self._barge_in_streak = getattr(self, "_barge_in_streak", 0) + 1
-                        if self._barge_in_streak >= 2:
-                            self._barge_in_streak = 0
-                            print("[JARVIS] 🎙️ Conversational barge-in detected — interrupting")
-                            loop.call_soon_threadsafe(self.interrupt)
-                            with self._speaking_lock:
-                                self._is_speaking = False
-
-                            # Stream pre-roll buffer + current frame immediately so Gemini
-                            # receives the full user question without losing opening syllables!
-                            if not self.ui.muted and not self._phone_active:
-                                if preroll:
-                                    for chunk in preroll:
-                                        loop.call_soon_threadsafe(
-                                            self.out_queue.put_nowait,
-                                            {"data": chunk, "mime_type": "audio/pcm;rate=16000"}
-                                        )
-                                    preroll.clear()
-                                try:
-                                    self.ui.set_audio_level(lvl)
-                                except Exception:
-                                    pass
-                            return
-                    else:
-                        self._barge_in_streak = max(0, getattr(self, "_barge_in_streak", 0) - 1)
-                except Exception:
-                    self._barge_in_streak = 0
                 return
-            else:
-                self._barge_in_streak = 0
 
             # ── Echo tail ────────────────────────────────────────────────────
             # The speaking flag has dropped but the speakers have not finished.
@@ -2127,11 +2140,6 @@ class JarvisLive:
 
                     if response.server_content:
                         sc = response.server_content
-
-                        # Server-side barge-in from Gemini Live
-                        if getattr(sc, "interrupted", False):
-                            print("[JARVIS] ⚡ Gemini Live detected barge-in interruption")
-                            self.interrupt()
 
                         if sc.output_transcription and sc.output_transcription.text:
                             txt = _clean_transcript(sc.output_transcription.text)
@@ -2545,6 +2553,7 @@ class JarvisLive:
             "Focus on what the user accomplished or discussed. "
             "Output ONLY the summary text, nothing else:\n\n" + convo
         )
+        summary = ""
         try:
             from core import gemini
             summary = await asyncio.to_thread(
@@ -2554,6 +2563,12 @@ class JarvisLive:
                 save_session_summary(summary, lang)
         except Exception as e:
             print(f"[Memory] ⚠️ Session summary failed: {e}")
+
+        try:
+            from memory.memory_manager import archive_session
+            await asyncio.to_thread(archive_session, log, summary, lang)
+        except Exception as e:
+            print(f"[Memory] ⚠️ Archiving session failed: {e}")
 
     # ── System monitor ──────────────────────────────────────────────────────────
 
