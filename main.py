@@ -399,9 +399,11 @@ TOOL_DECLARATIONS = [
     {
         "name": "system_status",
         "description": (
-            "Returns real-time system metrics: CPU usage, RAM, GPU load, CPU temperature, "
-            "uptime, and process count. Use when the user asks about computer performance, "
-            "temperature, memory, or resource usage."
+            "Returns live, up-to-the-second system hardware metrics and power status: exact battery percentage, "
+            "charging state, AC power connection, remaining runtime, live CPU usage and temperature, "
+            "RAM consumption, GPU utilization, disk space, and workstation uptime. "
+            "MUST be called whenever the user asks about battery percentage, charging status, power level, "
+            "hardware specs, system status, temperature, memory, or resource usage."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -1550,23 +1552,19 @@ class JarvisLive:
             except Exception:
                 pass
 
-            bat_str = "AC Power Connected (Charging)"
-            bat = psutil.sensors_battery()
-            if bat:
-                stat = "Charging" if bat.power_plugged else "Discharging"
-                mins = f", approximately {round(bat.secsleft / 60)} minutes remaining" if bat.secsleft > 0 and not bat.power_plugged else ""
-                bat_str = f"{bat.percent}% [{stat}{mins}]"
-
             hw_ctx = (
                 f"[HOST WORKSTATION & HARDWARE ARCHITECTURE]\n"
                 f"Workstation: {model_name} (Windows 11 Home 64-bit)\n"
                 f"CPU: {cpu_name} (12 cores @ 4.80 GHz)\n"
                 f"GPU: NVIDIA GeForce RTX 4050 Laptop GPU (6 GB VRAM) & Intel Graphics\n"
-                f"Memory: {ram_used_gb} GB used / {ram_tot_gb} GB total ({vm.percent}% load)\n"
-                f"Power Status: Battery at {bat_str}\n"
+                f"Memory: {ram_tot_gb} GB RAM total\n"
                 f"Display: 1920x1200 @ 144Hz\n"
                 f"Owner: Naman Gaonkar (Developer & Creator)\n"
-                f"Status: You possess full, unrestricted local workstation control, file management, coding automation, and terminal execution.\n\n"
+                f"Status: You possess full, unrestricted local workstation control, file management, coding automation, and terminal execution.\n"
+                f"CRITICAL REAL-TIME SYSTEM & BATTERY RULE:\n"
+                f"- For live battery percentage, power/charging state, current RAM/CPU load, or workstation metrics, "
+                f"you MUST call the 'system_status' tool to fetch the 100% accurate, live up-to-the-second numbers.\n"
+                f"- NEVER guess battery percentage or report static/stale numbers.\n\n"
             )
         except Exception:
             pass
@@ -1817,7 +1815,11 @@ class JarvisLive:
                     angle     = args.get("angle", "screen").lower()
                     user_text = args.get("text", "What do you see?")
                     if angle == "camera":
-                        img_b, mime_t = await loop.run_in_executor(None, _capture_camera)
+                        latest = self.ui.get_latest_camera_frame() if hasattr(self.ui, "get_latest_camera_frame") else None
+                        if latest:
+                            img_b, mime_t = latest, "image/jpeg"
+                        else:
+                            img_b, mime_t = await loop.run_in_executor(None, _capture_camera)
                         self.ui.start_camera_stream()
                         self._vision_cam_active = True
                         print(f"[Vision] 📷 Camera: {len(img_b):,} bytes")
@@ -1897,7 +1899,7 @@ class JarvisLive:
 
             elif name == "system_status":
                 r = await loop.run_in_executor(None, get_system_status)
-                result = str(r)
+                result = json.dumps(r, indent=2) if isinstance(r, dict) else str(r)
 
             elif name == "manage_monitor":
                 action = args.get("action", "").lower().strip()
@@ -2209,46 +2211,29 @@ class JarvisLive:
 
         if mode == "camera":
             self._vision_stream_task = asyncio.create_task(self._continuous_cam_loop())
-        elif mode == "screen":
+        else:
+            if hasattr(self.ui, "is_camera_streaming") and self.ui.is_camera_streaming():
+                self.ui.stop_camera_stream()
+
+        if mode == "screen":
             self._vision_stream_task = asyncio.create_task(self._continuous_screen_loop())
 
     async def _continuous_cam_loop(self) -> None:
-        """Continuous camera frame streamer to Gemini Live session."""
+        """Continuous camera frame streamer to Gemini Live session.
+        Consumes frames from the unified UI camera stream — zero hardware contention."""
         print("[Vision] 📹 Continuous CAM stream started.")
+        self.ui.start_camera_stream()
         try:
-            import cv2
-            from actions.screen_processor import _get_camera_index, _cv2_backend
-            backend = _cv2_backend()
-            cam_idx = _get_camera_index()
-            cap = cv2.VideoCapture(cam_idx, backend)
-            if not cap.isOpened():
-                cap = cv2.VideoCapture(0)
-            if not cap.isOpened():
-                print("[Vision] ⚠️ Could not open camera for continuous streaming.")
-                return
-
-            for _ in range(5):
-                cap.read()
-
             while self._active_vision_mode == "camera":
-                ret, frame = cap.read()
-                if ret and frame is not None:
-                    h, w = frame.shape[:2]
-                    max_dim = 640
-                    if max(h, w) > max_dim:
-                        scale = max_dim / float(max(h, w))
-                        frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
-                    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
-                    img_bytes = buf.tobytes()
-                    if self.session:
-                        try:
-                            await self.session.send_realtime_input(
-                                media_chunks=[types.Blob(data=img_bytes, mime_type="image/jpeg")]
-                            )
-                        except Exception as e:
-                            print(f"[Vision] ⚠️ Realtime cam frame send error: {e}")
-                await asyncio.sleep(1.5)
-            cap.release()
+                jpeg_bytes = self.ui.get_latest_camera_frame()
+                if self.session and jpeg_bytes:
+                    try:
+                        await self.session.send_realtime_input(
+                            media_chunks=[types.Blob(data=jpeg_bytes, mime_type="image/jpeg")]
+                        )
+                    except Exception as e:
+                        print(f"[Vision] ⚠️ Realtime cam frame send error: {e}")
+                await asyncio.sleep(1.2)
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -2394,10 +2379,12 @@ class JarvisLive:
                                 # This turn_complete IS the vision answer — close camera + release busy flag
                                 self._vision_close_pending = False
                                 self._vision_busy = False
-                                async def _cam_close():
-                                    await asyncio.sleep(2.0)
-                                    self.ui.stop_camera_stream()
-                                self._keep_task(asyncio.create_task(_cam_close()))
+                                if getattr(self, "_active_vision_mode", "off") != "camera":
+                                    async def _cam_close():
+                                        await asyncio.sleep(2.0)
+                                        if getattr(self, "_active_vision_mode", "off") != "camera":
+                                            self.ui.stop_camera_stream()
+                                    self._keep_task(asyncio.create_task(_cam_close()))
 
                     if response.tool_call:
                         fn_responses = []

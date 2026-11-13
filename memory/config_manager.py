@@ -141,7 +141,7 @@ def save_assistant_config(assistant_name: str, user_name: str) -> None:
     _write_config(data)
 
 
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.2.1"
 
 
 @_locked
@@ -158,10 +158,9 @@ def check_and_update_version_upgrade() -> str | None:
         return (
             f"[SYSTEM UPDATE NOTICE - VERSION {APP_VERSION}]\n"
             f"JARVIS has just been upgraded to Mark II Version {APP_VERSION}. "
-            f"Key upgrades applied: Continuous CAM Mode (F6) for active webcam vision, "
-            f"Continuous SCREEN Mode (F7) for real-time desktop presentation and visual assistance, "
-            f"dynamic audio output and microphone switching with auto-resolution, and "
-            f"strict local date, time, and session history synchronization. "
+            f"Key upgrades applied: Ultra-smooth, zero-lag continuous CAM mode with instant opening/closing, "
+            f"persistent camera streaming without auto-close interruptions, and "
+            f"100% accurate live real-time battery status, power state, and hardware metrics. "
             f"In your very first turn or response this session, acknowledge this upgrade warmly and smoothly "
             f"to the user (e.g. 'Systems upgraded and online, sir. Running Mark II Version {APP_VERSION}. How may I serve you today?')."
         )

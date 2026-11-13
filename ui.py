@@ -376,6 +376,14 @@ class JarvisUI:
         """Thread-safe: stop the live camera feed."""
         self._win.stop_camera_stream()
 
+    def get_latest_camera_frame(self) -> bytes | None:
+        """Thread-safe: get latest JPEG frame from active camera stream."""
+        return self._win.get_latest_camera_frame()
+
+    def is_camera_streaming(self) -> bool:
+        """Thread-safe: check if camera stream is currently active."""
+        return self._win.is_camera_streaming()
+
     @property
     def on_vision_mode_change(self):
         return self._win.on_vision_mode_change

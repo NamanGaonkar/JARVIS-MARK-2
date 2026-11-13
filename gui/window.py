@@ -453,6 +453,10 @@ class MainWindow(QMainWindow):
         self._quiz_hide_sig.connect(self._hide_quiz)
         self._review_sig.connect(self._show_review)
         self._cam_stop = threading.Event()
+        self._cam_thread: threading.Thread | None = None
+        self._cam_frame_lock = threading.Lock()
+        self._latest_cam_jpeg: bytes | None = None
+        self._cam_streaming: bool = False
 
         # Camera preview overlay (child of central widget, positioned in resizeEvent)
         self._cam_preview = _CameraPreview(self.centralWidget())
@@ -520,19 +524,29 @@ class MainWindow(QMainWindow):
                 self._cam_live_lbl.setPixmap(
                     px.scaled(w, h,
                               Qt.AspectRatioMode.KeepAspectRatio,
-                              Qt.TransformationMode.SmoothTransformation)
+                              Qt.TransformationMode.FastTransformation)
                 )
 
+    def get_latest_camera_frame(self) -> bytes | None:
+        with self._cam_frame_lock:
+            return self._latest_cam_jpeg
+
+    def is_camera_streaming(self) -> bool:
+        return bool(self._cam_streaming)
+
     def start_camera_stream(self) -> None:
+        if self._cam_thread and self._cam_thread.is_alive():
+            return
         self._cam_stop.clear()
+        self._cam_streaming = True
         self._cam_stream_sig.emit(True)
-        t = threading.Thread(target=self._cam_loop, daemon=True, name="cam-stream")
-        t.start()
+        self._cam_thread = threading.Thread(target=self._cam_loop, daemon=True, name="cam-stream")
+        self._cam_thread.start()
 
     def _cam_loop(self) -> None:
+        cap = None
         try:
             import cv2
-            # Reuse camera index detected by screen_processor (cached in api_keys.json)
             cam_idx = 0
             try:
                 import json as _j
@@ -544,27 +558,58 @@ class MainWindow(QMainWindow):
                 backend = cv2.CAP_DSHOW if _OS == "Windows" else cv2.CAP_ANY
             except AttributeError:
                 backend = 0
+
             cap = cv2.VideoCapture(cam_idx, backend)
-            if not cap.isOpened():
-                cap = cv2.VideoCapture(0)
-            if not cap.isOpened():
+            if not cap.isOpened() and cam_idx != 0:
+                cap = cv2.VideoCapture(0, backend)
+            if not cap or not cap.isOpened():
+                print(f"[Camera] Could not open camera {cam_idx}")
                 return
-            # warm-up frames
-            for _ in range(5):
+
+            # Hardware low-latency & smooth 30fps configuration
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_FPS, 30)
+
+            # Warm-up 2 quick frames
+            for _ in range(2):
                 cap.read()
-            while not self._cam_stop.wait(0.033) and cap.isOpened():
+
+            while not self._cam_stop.is_set() and cap.isOpened():
                 ret, frame = cap.read()
-                if ret and frame is not None:
-                    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
-                    self._cam_frame_sig.emit(buf.tobytes())
-            cap.release()
+                if not ret or frame is None:
+                    time.sleep(0.01)
+                    continue
+
+                # Encode to JPEG once (quality 60 gives crisp visuals with instant encoding)
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+                jpeg_bytes = buf.tobytes()
+
+                with self._cam_frame_lock:
+                    self._latest_cam_jpeg = jpeg_bytes
+
+                self._cam_frame_sig.emit(jpeg_bytes)
+                time.sleep(0.015)
         except Exception as e:
             print(f"[Camera] Stream error: {e}")
         finally:
+            if cap is not None:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+            with self._cam_frame_lock:
+                self._latest_cam_jpeg = None
+            self._cam_streaming = False
             self._cam_stream_sig.emit(False)
 
     def stop_camera_stream(self) -> None:
+        self._cam_streaming = False
         self._cam_stop.set()
+        with self._cam_frame_lock:
+            self._latest_cam_jpeg = None
+        self._cam_stream_sig.emit(False)
 
     # --- Video in the HUD area ---------------------------------------------
     #
