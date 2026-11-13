@@ -1328,34 +1328,44 @@ class JarvisLive:
             pass
 
     def interrupt(self) -> None:
-        """Stop JARVIS mid-speech: drain queued audio and open mic immediately."""
-        self._interrupted = True
+        """Stop JARVIS mid-speech: drain queued audio and open mic immediately.
+        If called while silent or idle, resets any stalled turns and triggers a clean session refresh."""
+        with self._speaking_lock:
+            speaking = bool(self._is_speaking)
         q = self.audio_in_queue
+        drained = 0
         if q:
-            drained = 0
             while True:
                 try:
                     q.get_nowait()
                     drained += 1
                 except Exception:
                     break
-            if drained:
-                print(f"[JARVIS] ✋ Interrupted — {drained} audio chunks discarded")
-        self.set_speaking(False)
-        # The words we were about to mouth are never going to be spoken now.
-        self._visemes.reset()
-        self._play_cursor = 0.0     # next batch starts a fresh timeline
-        if self._turn_done_event:
-            self._turn_done_event.clear()
-        # Draining the queue stops the speakers, but a local engine is still
-        # generating the rest of the answer and would keep filling it back up.
-        # Live has nothing to cancel here — the server stops on its own.
-        if self._engine is not None:
-            try:
-                self._engine.interrupt()
-            except Exception:
-                pass
-        self.ui.write_log("SYS: Interrupted — listening...")
+
+        if speaking or drained > 0:
+            self._interrupted = True
+            print(f"[JARVIS] ✋ Interrupted — {drained} audio chunks discarded")
+            self.set_speaking(False)
+            self._visemes.reset()
+            self._play_cursor = 0.0
+            if self._turn_done_event:
+                self._turn_done_event.clear()
+            if self._engine is not None:
+                try:
+                    self._engine.interrupt()
+                except Exception:
+                    pass
+            self.ui.write_log("SYS: Interrupted — listening...")
+        else:
+            # Called while not speaking: user wants to wake/reset any hesitation or stuck session
+            self._interrupted = False
+            self._clear_stall()
+            if self._turn_done_event:
+                self._turn_done_event.set()
+            self.ui.set_state("LISTENING")
+            self.ui.write_log("SYS: Session reset — listening.")
+            if self._reconnect_event:
+                self.request_reconnect(keep_context=True, reason="manual wake reset")
 
     def speak(self, text: str):
         if not self._loop or not self.session:
@@ -1853,13 +1863,15 @@ class JarvisLive:
             await self.session.send_realtime_input(
                 audio=types.Blob(
                     data=msg["data"],
-                    mime_type=msg.get("mime_type", "audio/pcm"),
+                    mime_type=msg.get("mime_type", "audio/pcm;rate=16000"),
                 )
             )
 
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")
         loop = asyncio.get_event_loop()
+        self._user_was_speaking = False
+        self._user_spoke_time = 0.0
 
         def callback(indata, frames, time_info, status):
             # ── Wake-word gate ───────────────────────────────────────────────
@@ -1918,13 +1930,20 @@ class JarvisLive:
                 data = indata.tobytes()
                 loop.call_soon_threadsafe(
                     self.out_queue.put_nowait,
-                    {"data": data, "mime_type": "audio/pcm"}
+                    {"data": data, "mime_type": "audio/pcm;rate=16000"}
                 )
                 # Feed the live mic level to the HUD so the waveform reacts to
                 # the user's actual voice while listening. Purely cosmetic — any
                 # failure here must never disturb the mic.
                 try:
-                    self.ui.set_audio_level(_pcm_level(indata))
+                    lvl = _pcm_level(indata)
+                    self.ui.set_audio_level(lvl)
+                    if lvl > 0.08:
+                        self._user_was_speaking = True
+                        self._user_spoke_time = time.monotonic()
+                    elif getattr(self, "_user_was_speaking", False) and (time.monotonic() - getattr(self, "_user_spoke_time", 0.0) > 0.6):
+                        self._user_was_speaking = False
+                        loop.call_soon_threadsafe(self._arm_stall)
                 except Exception:
                     pass
 
@@ -2077,6 +2096,8 @@ class JarvisLive:
                             if txt:
                                 in_buf.append(txt)
                                 self._last_user_speech = time.monotonic()
+                                self._interrupted = False  # fresh user speech automatically clears any stale interrupt
+                                self._arm_stall()          # arm stall watchdog for the incoming answer
 
                         if sc.turn_complete:
                             if self._turn_done_event:

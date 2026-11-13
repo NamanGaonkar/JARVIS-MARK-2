@@ -337,11 +337,11 @@ class HudCanvas(QWidget):
                     self.update()
                 return
 
-            # 3. Interrupt Button
+            # 3. Interrupt / Reset Button
             if hasattr(self, "_interrupt_btn_rect") and self._interrupt_btn_rect.contains(pos):
                 if hasattr(self, "on_interrupt") and callable(self.on_interrupt):
                     self.on_interrupt()
-                    self.append_hud_log("VOICE: Speech interrupted.")
+                    self.append_hud_log("VOICE: Speech stopped." if self.speaking else "SESSION: Reset & listening.")
                     self.update()
                 return
 
@@ -847,13 +847,13 @@ class HudCanvas(QWidget):
         p.drawText(self._mute_btn_rect, Qt.AlignmentFlag.AlignCenter, mute_txt)
         p.restore()
 
-        self._interrupt_btn_rect = QRectF(304.0, 18.0, 125.0, 30.0)
+        self._interrupt_btn_rect = QRectF(304.0, 18.0, 130.0, 30.0)
         is_hover_int = bool(getattr(self, "_hover_interrupt", False))
         is_spk = bool(self.speaking)
         p.save()
         int_col = qcol(C.ACC if is_spk else C.PRI)
         int_bg = QColor(255, 90, 0, 70 if is_hover_int else 30) if is_spk else QColor(255, 157, 0, 45 if is_hover_int else 14)
-        int_txt = "STOP SPEECH" if is_spk else "INTERRUPT"
+        int_txt = "STOP SPEECH" if is_spk else "RESET / WAKE"
         p.setPen(QPen(int_col, 1.2))
         p.setBrush(QBrush(int_bg))
         p.drawRoundedRect(self._interrupt_btn_rect, 4, 4)
