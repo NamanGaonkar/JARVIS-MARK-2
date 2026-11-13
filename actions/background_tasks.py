@@ -62,6 +62,8 @@ def background_tasks(parameters: dict, player=None) -> str:
         try:
             t = eng.start(task, agent=a.get("agent") or "general", minutes=a.get("minutes"),
                           deliver=a.get("deliver") or "voice", not_before=not_before, files=files)
+            if player:
+                player.refresh_tasks()
         except ValueError as e:
             return outcome.failed("background_tasks", str(e))
         starts = time.strftime("%Y-%m-%d %H:%M", time.localtime(not_before)) if not_before else "now"
@@ -104,11 +106,15 @@ def background_tasks(parameters: dict, player=None) -> str:
                 + "\n" + outcome.untrusted("task-result", (task.get("result") or "")[:12_000]))
     if action == "finish":
         ok = eng.cancel(task["id"], finish=True)
+        if ok and player:
+            player.refresh_tasks()
         return (outcome.started("background_tasks", task_id=task["id"],
                                 note="stopping and writing up what was found")
                 if ok else outcome.failed("background_tasks", "that task is not running"))
     if action == "cancel":
         ok = eng.cancel(task["id"])
+        if ok and player:
+            player.refresh_tasks()
         return (outcome.done("background_tasks", task_id=task["id"], cancelled=True)
                 if ok else outcome.failed("background_tasks", "that task is not running"))
     if action == "steer":

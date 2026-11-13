@@ -32,6 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['C:/Users/Naman Gaonkar/Desktop/AITD/Projects/VISION/config/jarvis.ico'],
 )
 coll = COLLECT(
     exe,

@@ -90,18 +90,22 @@ def _restore_from_trash(original: Path) -> str:
             f"automatically, but it is there and can be restored by hand.")
 
 
-_SAFE_ROOTS: list[Path] = [
-    Path.home(),
-]
-
 def _is_safe_path(target: Path) -> bool:
-    """Is the given path inside _SAFE_ROOTS? If not, reject the operation."""
+    """Check if the given path is allowed for file operations.
+    Allows deep traversal and full access across drives and subfolders while
+    protecting critical OS system roots from catastrophic accidental deletion.
+    """
     try:
         resolved = target.resolve()
-        return any(
-            resolved == root.resolve() or resolved.is_relative_to(root.resolve())
-            for root in _SAFE_ROOTS
-        )
+        res_str = str(resolved).lower().rstrip("/\\")
+        if _OS == "Windows":
+            win_root = os.environ.get("SystemRoot", r"C:\Windows").lower().rstrip("/\\")
+            sys32 = os.path.join(win_root, "system32").lower()
+            if len(res_str) <= 3 and res_str.endswith(":"):
+                return False
+            if res_str == win_root or res_str == sys32:
+                return False
+        return True
     except Exception:
         return False
 

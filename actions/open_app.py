@@ -140,6 +140,64 @@ def _launch_windows(app_name: str, url: str | None = None) -> bool:
             subprocess.Popen([str(wt_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return True
 
+    # Built-in Windows Essentials & Office Suite Launchers
+    win_apps = {
+        "notepad": ["notepad.exe"],
+        "notepad.exe": ["notepad.exe"],
+        "calc": ["calc.exe"],
+        "calculator": ["calc.exe"],
+        "word": ["winword.exe", "winword"],
+        "winword": ["winword.exe"],
+        "ms word": ["winword.exe", "winword"],
+        "microsoft word": ["winword.exe", "winword"],
+        "powerpoint": ["powerpnt.exe", "powerpnt"],
+        "powerpnt": ["powerpnt.exe"],
+        "ms powerpoint": ["powerpnt.exe", "powerpnt"],
+        "microsoft powerpoint": ["powerpnt.exe", "powerpnt"],
+        "excel": ["excel.exe", "excel"],
+        "ms excel": ["excel.exe", "excel"],
+        "microsoft excel": ["excel.exe", "excel"],
+        "cmd": ["cmd.exe"],
+        "powershell": ["powershell.exe"],
+        "paint": ["mspaint.exe"],
+        "mspaint": ["mspaint.exe"],
+        "taskmgr": ["taskmgr.exe"],
+        "task manager": ["taskmgr.exe"],
+    }
+    if name_lower in win_apps:
+        for cmd in win_apps[name_lower]:
+            try:
+                subprocess.Popen([cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return True
+            except Exception:
+                try:
+                    os.startfile(cmd)
+                    return True
+                except Exception:
+                    pass
+
+    # Folder & Subfolder traversal anywhere in the system
+    clean_folder = name_clean
+    if clean_folder.lower().startswith("folder "):
+        clean_folder = clean_folder[7:].strip()
+    elif clean_folder.lower().startswith("subfolder "):
+        clean_folder = clean_folder[10:].strip()
+
+    folder_candidates = [
+        Path(clean_folder).expanduser(),
+        Path.home() / clean_folder,
+        Path.home() / "Desktop" / clean_folder,
+        Path.home() / "Documents" / clean_folder,
+        Path.home() / "Downloads" / clean_folder,
+    ]
+    for fc in folder_candidates:
+        try:
+            if fc.exists():
+                os.startfile(str(fc.resolve()))
+                return True
+        except Exception:
+            pass
+
     # 1. Known special folders & Explorer navigation
     folder_aliases = {
         "downloads": Path.home() / "Downloads",

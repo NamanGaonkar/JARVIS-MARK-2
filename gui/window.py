@@ -94,6 +94,35 @@ from gui.widgets import (ArcLogo, CommandFrame, DataRow, HeaderBar, HoloPanel, I
                          TaskRow)
 
 
+class SmartCommandInput(QLineEdit):
+    """Command input that allows pasting text, image files, or raw clipboard screenshots."""
+    def keyPressEvent(self, event):
+        if event.matches(QKeySequence.StandardKey.Paste):
+            try:
+                cb = QApplication.clipboard()
+                md = cb.mimeData()
+                if md and md.hasImage():
+                    img = cb.image()
+                    if not img.isNull():
+                        import tempfile, time as _time
+                        tpath = Path(tempfile.gettempdir()) / f"jarvis_clip_{int(_time.time())}.png"
+                        img.save(str(tpath), "PNG")
+                        cur = self.text().strip()
+                        self.setText(f"{cur} [Image: {tpath}]".strip())
+                        return
+                if md and md.hasUrls():
+                    urls = md.urls()
+                    if urls:
+                        local_p = urls[0].toLocalFile()
+                        if local_p:
+                            cur = self.text().strip()
+                            self.setText(f"{cur} {local_p}".strip())
+                            return
+            except Exception:
+                pass
+        super().keyPressEvent(event)
+
+
 class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
     _state_sig      = pyqtSignal(str)
@@ -815,11 +844,11 @@ class MainWindow(QMainWindow):
         except ImportError:
             return False
 
-        CYAN   = (0, 212, 255)
-        DIM    = (0, 100, 140)
-        DARK   = (0, 6, 10)
-        GLOW   = (0, 160, 200)
-        WHITE  = (220, 240, 255)
+        AMBER  = (255, 157, 0)
+        DIM    = (140, 80, 0)
+        DARK   = (15, 9, 3)
+        GLOW   = (255, 190, 30)
+        WHITE  = (255, 245, 220)
 
         def _render(sz: int) -> PIL.Image.Image:
             S  = sz * 4                     # draw at 4× then downscale
@@ -834,7 +863,7 @@ class MainWindow(QMainWindow):
             # ── outer border ring ─────────────────────────────────────────
             lw = max(2, S // 40)
             d.ellipse([cx-R, cy-R, cx+R, cy+R],
-                      outline=(*CYAN, 220), width=lw)
+                      outline=(*AMBER, 235), width=lw)
 
             # ── mid decorative ring ───────────────────────────────────────
             R2 = int(R * 0.72)
@@ -851,7 +880,7 @@ class MainWindow(QMainWindow):
                 y1 = cy + int(R_inner * math.sin(angle))
                 x2 = cx + int(R_outer * math.cos(angle))
                 y2 = cy + int(R_outer * math.sin(angle))
-                d.line([x1, y1, x2, y2], fill=(*GLOW, 200), width=spoke_w)
+                d.line([x1, y1, x2, y2], fill=(*GLOW, 220), width=spoke_w)
 
             # ── 6 tick marks on outer ring ────────────────────────────────
             for i in range(6):
@@ -861,21 +890,21 @@ class MainWindow(QMainWindow):
                     d.point(
                         [cx + int(rx * math.cos(angle)),
                          cy + int(rx * math.sin(angle))],
-                        fill=(*WHITE, 220),
+                        fill=(*WHITE, 240),
                     )
 
             # ── inner glowing ring ────────────────────────────────────────
             Ri = int(R * 0.26)
             d.ellipse([cx-Ri, cy-Ri, cx+Ri, cy+Ri],
-                      outline=(*CYAN, 255), width=max(2, lw))
+                      outline=(*AMBER, 255), width=max(2, lw))
 
             # ── bright glow soft blur applied before core ─────────────────
-            # (draw a slightly larger cyan circle on a separate layer)
+            # (draw a slightly larger amber circle on a separate layer)
             glow_layer = PIL.Image.new("RGBA", (S, S), (0, 0, 0, 0))
             gd = PIL.ImageDraw.Draw(glow_layer)
             Rc = int(R * 0.13)
             gd.ellipse([cx-Rc*2, cy-Rc*2, cx+Rc*2, cy+Rc*2],
-                       fill=(*CYAN, 110))
+                       fill=(*AMBER, 130))
             glow_layer = glow_layer.filter(PIL.ImageFilter.GaussianBlur(S // 14))
             img = PIL.Image.alpha_composite(img, glow_layer)
             d   = PIL.ImageDraw.Draw(img)
@@ -1615,9 +1644,10 @@ class MainWindow(QMainWindow):
         self._show_content("ROUTINE", "\n".join(lines)[:4000])
 
     def _refresh_tasks(self) -> None:
-        if getattr(self, "_tasks_stack", None) is not None and self._tasks_stack.currentIndex() == 1:
+        try:
             self._refresh_routines()
-            return
+        except Exception:
+            pass
         import time as _time
         try:
             from core.tasks import desktop
@@ -1884,7 +1914,7 @@ class MainWindow(QMainWindow):
         prompt.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         row.addWidget(prompt)
 
-        self._input = QLineEdit()
+        self._input = SmartCommandInput()
         self._input.setPlaceholderText("Type a command or question…")
         self._input.setFont(px_font(13))
         self._input.setStyleSheet(f"""

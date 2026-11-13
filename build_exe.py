@@ -41,7 +41,9 @@ def build():
         if src_path.exists():
             add_data_args.extend(["--add-data", f"{src_path}{sep}{dst}"])
 
-    icon_path = BASE_DIR / "config" / "ironman.ico"
+    icon_path = BASE_DIR / "config" / "jarvis.ico"
+    if not icon_path.exists():
+        icon_path = BASE_DIR / "config" / "ironman.ico"
     icon_args = []
     if icon_path.exists():
         icon_args = ["--icon", str(icon_path)]

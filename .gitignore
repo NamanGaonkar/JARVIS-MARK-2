@@ -19,6 +19,7 @@ config/whatsapp_web/
 memory/long_term.json
 memory/*.db
 memory/routines.json
+memory/tasks/
 
 # ── Python build noise ────────────────────────────────────────────────────────
 __pycache__/

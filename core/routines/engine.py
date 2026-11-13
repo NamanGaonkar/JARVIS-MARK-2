@@ -246,7 +246,9 @@ class RoutineEngine:
             if r is None:
                 return False
             if r.get("system"):
-                raise ValueError("a built-in routine can be turned off, not deleted")
+                r["enabled"] = False
+                self._save()
+                return True
             self._doc["routines"].remove(r)
             self._save()
             return True

@@ -92,8 +92,25 @@ def routines(parameters: dict, player=None) -> str:
                     rid = item["id"]
                     break
 
+        # Check if user wants to remove all
+        if action == "remove" and (rid in ("all", "*") or target_name in ("all", "everything", "all routines", "all tasks")):
+            removed_ids = []
+            for item in list(eng.list()):
+                eng.remove(item["id"])
+                removed_ids.append(item["id"])
+            if player:
+                player.write_log(f"[Routines] Removed all routines: {len(removed_ids)}")
+                player.refresh_tasks()
+            return outcome.done("routines", removed_all=True, count=len(removed_ids))
+
         if not rid:
-            return outcome.failed("routines", "which routine? give its id (list shows them), name, or builtin")
+            # If no specific routine specified and removing, pick the latest user-created routine
+            if action == "remove":
+                all_r = [item for item in eng.list() if not item.get("system")]
+                if all_r:
+                    rid = all_r[-1]["id"]
+            if not rid:
+                return outcome.failed("routines", "which routine? give its id (list shows them), name, or builtin")
 
         if action == "update":
             fields = {k: a[k] for k in ("name", "text", "deliver", "agent", "minutes", "quiet", "enabled")

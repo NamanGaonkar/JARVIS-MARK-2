@@ -221,32 +221,6 @@ class Reactor3D:
         p.setBrush(QBrush(corona))
         p.drawEllipse(QPointF(cx, cy), corona_r, corona_r)
 
-        # 10 Toroidal Magnetic Confinement Induction Coils around reactor boundary
-        coil_r_in = sr * 0.95
-        coil_r_out = sr * 1.34
-        for k in range(10):
-            angle = (k * 2.0 * math.pi / 10.0) + spin * 0.14
-            c_cos, c_sin = math.cos(angle), math.sin(angle)
-            p1_x = cx + coil_r_in * c_cos
-            p1_y = cy + coil_r_in * c_sin
-            p2_x = cx + coil_r_out * c_cos
-            p2_y = cy + coil_r_out * c_sin
-
-            # Heavy magnetic stator bracket body
-            p.setPen(QPen(_with_alpha(main, 0.40 + 0.35 * amp), 3.8))
-            p.drawLine(QLineF(p1_x, p1_y, p2_x, p2_y))
-
-            # Radiant copper-gold induction windings
-            p.setPen(QPen(_with_alpha(acc, 0.75 + 0.25 * amp), 1.8))
-            p.drawLine(QLineF(p1_x, p1_y, p2_x, p2_y))
-
-            # Outer magnetic capacitor tip nodes
-            tip_x = cx + (coil_r_out + 2.8) * c_cos
-            tip_y = cy + (coil_r_out + 2.8) * c_sin
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(_with_alpha(white if (k % 2 == 0) else acc, 0.88)))
-            p.drawEllipse(QPointF(tip_x, tip_y), 2.0, 2.0)
-
         # Concentric Technical Stator Telemetry Ring with 36 micro-hash ticks
         stator_r = sr * 0.92
         p.setPen(QPen(_with_alpha(main, 0.35 + 0.25 * amp), 1.0))
@@ -257,24 +231,10 @@ class Reactor3D:
         for t_idx in range(36):
             t_ang = (t_idx * 2.0 * math.pi / 36.0) - spin * 0.16
             t_cos, t_sin = math.cos(t_ang), math.sin(t_ang)
-            t_len = 5.5 if (t_idx % 9 == 0) else (3.2 if (t_idx % 3 == 0) else 1.8)
-            p.setPen(QPen(_with_alpha(acc if (t_idx % 9 == 0) else main, 0.70 if (t_idx % 9 == 0) else 0.35), 1.0))
+            t_len = 4.0 if (t_idx % 9 == 0) else (2.4 if (t_idx % 3 == 0) else 1.2)
+            p.setPen(QPen(_with_alpha(acc if (t_idx % 9 == 0) else main, 0.60 if (t_idx % 9 == 0) else 0.28), 1.0))
             p.drawLine(QLineF(cx + (stator_r - t_len) * t_cos, cy + (stator_r - t_len) * t_sin,
                               cx + stator_r * t_cos, cy + stator_r * t_sin))
-
-        # Dynamic Plasma Micro-Lightning Discharge Filaments
-        if live or amp > 0.03:
-            p.setPen(QPen(_with_alpha(white, 0.80 * min(1.0, amp * 1.6 + 0.35)), 1.3))
-            for f_idx in range(5):
-                f_ang = (f_idx * 2.0 * math.pi / 5.0) + spin * 1.6 + math.sin(spin * 5.0 + f_idx) * 0.35
-                f_cos, f_sin = math.cos(f_ang), math.sin(f_ang)
-                m_r = sr * (0.35 + 0.25 * math.sin(spin * 3.5 + f_idx))
-                m_x = cx + m_r * f_cos + math.sin(spin * 12.0 + f_idx) * 3.5
-                m_y = cy + m_r * f_sin + math.cos(spin * 12.0 + f_idx) * 3.5
-                t_x = cx + stator_r * f_cos
-                t_y = cy + stator_r * f_sin
-                p.drawLine(QLineF(cx, cy, m_x, m_y))
-                p.drawLine(QLineF(m_x, m_y, t_x, t_y))
 
         # Radiant spherical core
         core_grad = QRadialGradient(QPointF(cx, cy), sr, QPointF(cx - sr * 0.15, cy - sr * 0.20))
