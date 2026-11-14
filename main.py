@@ -2090,7 +2090,7 @@ class JarvisLive:
                         return
                     self._tail_until = 0.0      # a real voice ends the tail early
                 except Exception:
-                    return
+                    pass
             elif self._echo._hist:
                 self._echo.reset()
 
@@ -2485,13 +2485,10 @@ class JarvisLive:
                         timeout=0.1
                     )
                 except asyncio.TimeoutError:
-                    if (
-                        self._turn_done_event
-                        and self._turn_done_event.is_set()
-                        and self.audio_in_queue.empty()
-                    ):
+                    if self.audio_in_queue.empty():
                         self.set_speaking(False)
-                        self._turn_done_event.clear()
+                        if self._turn_done_event and self._turn_done_event.is_set():
+                            self._turn_done_event.clear()
                     continue
 
                 self.set_speaking(True)

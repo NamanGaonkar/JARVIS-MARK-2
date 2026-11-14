@@ -90,21 +90,6 @@ def run(parameters: dict, player=None, session_memory=None) -> str:
 
     peak = float(np.max(np.abs(audio_array))) if audio_array is not None else 0.0
 
-    # Fallback to microphone if loopback is completely silent (e.g. speakers playing in room)
-    if peak < 0.001:
-        default_mic = sd.default.device[0]
-        if default_mic is not None and default_mic >= 0 and default_mic != dev_idx:
-            try:
-                mic_dev = sd.query_devices(default_mic)
-                mic_sr = int(mic_dev.get("default_samplerate", 48000))
-                mic_audio = _record_audio(default_mic, mic_sr, 1, seconds)
-                if mic_audio is not None and float(np.max(np.abs(mic_audio))) > peak:
-                    audio_array = mic_audio
-                    sr = mic_sr
-                    peak = float(np.max(np.abs(audio_array)))
-            except Exception:
-                pass
-
     if audio_array is None or peak < 0.0003:
         if player:
             player.write_log("SYS", "Audio loopback captured silence.")
