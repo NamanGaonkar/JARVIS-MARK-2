@@ -36,7 +36,7 @@ from core import outcome
 _MAX_BYTES = 6_000_000          # a page larger than this is not an article
 _MAX_PDF_BYTES = 20_000_000
 _MAX_REDIRECTS = 4
-_TIMEOUT = 20
+_TIMEOUT = 8
 _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 

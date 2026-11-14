@@ -148,8 +148,6 @@ VISION (JARVIS MARK 2)
 
 ---
 
-## License & Attribution
+## License
 
-* Original framework and architecture based on Mark LVII by [FatihMakes](https://github.com/FatihMakes).
-* Upgraded and themed as **JARVIS MARK 2** featuring the holographic HUD, universal LLM provider pipeline, and automated task execution.
-* Distributed under the MIT License.
+Distributed under the MIT License.

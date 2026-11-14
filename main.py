@@ -1723,21 +1723,21 @@ class JarvisLive:
         # before a reply actually is, and the default has to suit everybody, so
         # it is necessarily cautious.
         turn = get_turn_tuning()
-        if turn.get("enabled", True):
-            detect = types.AutomaticActivityDetection(
-                silence_duration_ms=turn["silence_ms"],
-                prefix_padding_ms=turn["prefix_ms"],
-            )
+        silence_ms = turn["silence_ms"] if turn.get("enabled") else 850
+        prefix_ms = turn["prefix_ms"] if turn.get("enabled") else 200
+        detect = types.AutomaticActivityDetection(
+            silence_duration_ms=silence_ms,
+            prefix_padding_ms=prefix_ms,
+        )
+        # High start sensitivity ensures soft speech and laptop microphones are never missed
+        detect.start_of_speech_sensitivity = types.StartSensitivity.START_SENSITIVITY_HIGH
+        if turn.get("enabled"):
             if turn["end_sensitivity"] == "high":
                 detect.end_of_speech_sensitivity = types.EndSensitivity.END_SENSITIVITY_HIGH
             elif turn["end_sensitivity"] == "low":
                 detect.end_of_speech_sensitivity = types.EndSensitivity.END_SENSITIVITY_LOW
-            if turn["start_sensitivity"] == "high":
-                detect.start_of_speech_sensitivity = types.StartSensitivity.START_SENSITIVITY_HIGH
-            elif turn["start_sensitivity"] == "low":
-                detect.start_of_speech_sensitivity = types.StartSensitivity.START_SENSITIVITY_LOW
-            out["realtime_input_config"] = types.RealtimeInputConfig(
-                automatic_activity_detection=detect)
+        out["realtime_input_config"] = types.RealtimeInputConfig(
+            automatic_activity_detection=detect)
 
         # Screenshots and camera frames are tokenised at this resolution and then
         # stay in the session's context. 'medium' keeps on-screen text legible
@@ -2070,7 +2070,13 @@ class JarvisLive:
                 return
             
             if not self.ui.muted and not self._phone_active:
-                data = indata.tobytes()
+                # Boost microphone gain gently for laptop array mics to ensure Gemini Live detects whisper and soft speech
+                try:
+                    boosted = np.clip(indata.astype(np.float32) * 1.85, -32767, 32767).astype(np.int16)
+                    data = boosted.tobytes()
+                except Exception:
+                    data = indata.tobytes()
+
                 def _enqueue():
                     try:
                         self.out_queue.put_nowait({"data": data, "mime_type": "audio/pcm;rate=16000"})
@@ -2085,9 +2091,9 @@ class JarvisLive:
                 # the user's actual voice while listening. Purely cosmetic — any
                 # failure here must never disturb the mic.
                 try:
-                    lvl = _pcm_level(indata)
-                    self.ui.set_audio_level(lvl)
-                    if lvl > 0.08:
+                    lvl = _pcm_level(indata) * 1.85
+                    self.ui.set_audio_level(min(1.0, lvl))
+                    if lvl > 0.025:
                         self._user_was_speaking = True
                         self._user_spoke_time = time.monotonic()
                     elif getattr(self, "_user_was_speaking", False) and (time.monotonic() - getattr(self, "_user_spoke_time", 0.0) > 0.6):

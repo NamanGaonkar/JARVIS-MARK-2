@@ -138,43 +138,47 @@ def pinpoint_location(query: str, save: bool = True) -> dict:
     return loc
 
 
-def get_location(refresh: bool = False) -> dict:
+def get_location(refresh: bool = False, force_live: bool = False) -> dict:
     """Return dict with city, region, country, lat, lon, and map_url.
 
-    Defaults to user's real detected location, with graceful offline fallback.
+    Resolves user's real live location via workstation IP geolocation, with graceful cache fallback.
     """
     global _cached_loc
     with _loc_lock:
-        if _cached_loc and not refresh:
+        if _cached_loc and not refresh and not force_live:
             return _cached_loc
 
-        # Try reading saved cache
-        if LOC_FILE.exists():
+        # Try reading saved cache (only if not forcing live refresh)
+        if LOC_FILE.exists() and not force_live:
             try:
                 saved = json.loads(LOC_FILE.read_text(encoding="utf-8"))
-                if saved.get("pinned") or not refresh:
+                if saved.get("pinned") and not refresh:
+                    _cached_loc = saved
+                    return _cached_loc
+                elif not refresh:
                     _cached_loc = saved
                     return _cached_loc
             except Exception:
                 pass
 
-        # Default to user's real base location (Panjim, Goa)
+        # Default fallback base location
         loc = {
             "city": "Panjim",
             "region": "Goa",
             "country": "India",
-            "lat": 15.4957,
-            "lon": 73.8262,
+            "lat": 15.5016,
+            "lon": 73.8234,
             "isp": "",
             "pinned": False,
         }
 
+        # Query live workstation public IP geolocation
         try:
             req = urllib.request.Request(
                 "http://ip-api.com/json/",
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Jarvis/2.0"},
             )
-            with urllib.request.urlopen(req, timeout=3.5) as resp:
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 if data.get("status") == "success":
                     loc["city"] = data.get("city") or loc["city"]
@@ -182,14 +186,14 @@ def get_location(refresh: bool = False) -> dict:
                     loc["country"] = data.get("country") or loc["country"]
                     loc["lat"] = float(data.get("lat", loc["lat"]))
                     loc["lon"] = float(data.get("lon", loc["lon"]))
-                    loc["isp"] = data.get("isp") or ""
+                    loc["isp"] = data.get("isp") or data.get("as") or ""
         except Exception:
             try:
                 req2 = urllib.request.Request(
                     "https://ipinfo.io/json",
                     headers={"User-Agent": "Mozilla/5.0"},
                 )
-                with urllib.request.urlopen(req2, timeout=3.5) as resp2:
+                with urllib.request.urlopen(req2, timeout=4.0) as resp2:
                     d2 = json.loads(resp2.read().decode("utf-8"))
                     loc["city"] = d2.get("city") or loc["city"]
                     loc["region"] = d2.get("region") or loc["region"]
@@ -211,9 +215,11 @@ def get_location(refresh: bool = False) -> dict:
         except Exception:
             pass
 
-        # If tactical map tile doesn't exist, generate it
-        if not MAP_FILE.exists():
+        # Update tactical map tile if missing or newly relocated
+        try:
             fetch_tactical_tiles(lat, lon, zoom=14)
+        except Exception:
+            pass
 
         _cached_loc = loc
         return loc

@@ -203,6 +203,34 @@ class TaskTools:
             n = 8
         rows = _ddg_news(query, max_results=n) if args.get("news") else _ddg_search(query, max_results=n)
         rows = [r for r in rows or [] if r.get("url")]
+
+        # Multi-engine fallback: if DDG is empty, throttled, or failed, fallback to Wikipedia search
+        if not rows:
+            try:
+                import urllib.parse
+                import urllib.request
+                import json
+                enc_q = urllib.parse.quote(query)
+                req = urllib.request.Request(
+                    f"https://en.wikipedia.org/w/api.php?action=opensearch&search={enc_q}&limit={n}&format=json",
+                    headers={"User-Agent": "JarvisAI-Assistant/2.0"}
+                )
+                with urllib.request.urlopen(req, timeout=4.0) as resp:
+                    wdata = json.loads(resp.read().decode("utf-8"))
+                    if len(wdata) >= 4 and wdata[1]:
+                        titles = wdata[1]
+                        snippets = wdata[2]
+                        urls = wdata[3]
+                        for idx in range(len(titles)):
+                            if idx < len(urls) and urls[idx]:
+                                rows.append({
+                                    "title": titles[idx],
+                                    "snippet": snippets[idx] if idx < len(snippets) else "",
+                                    "url": urls[idx]
+                                })
+            except Exception as we:
+                self._log(f"[Tasks] Wikipedia fallback search error: {we}")
+
         if not rows:
             return outcome.failed("search_web", "no results — try other words or another language",
                                   query=query)

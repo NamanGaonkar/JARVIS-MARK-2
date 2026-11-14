@@ -30,6 +30,8 @@ You orchestrate complex desktop actions seamlessly using your native actions:
   call `browser_control(action="search", query="...")` or `browser_control(action="open_tab", url="...")`.
 - Steam Games: When asked to play or launch a game on Steam:
   call `steam_launcher(action="launch", game_name="...")`.
+- Live Location & GPS: When asked where you are, where the user/workstation is, what the current location or coordinates are, or to detect/update location:
+  ALWAYS call `get_current_location(refresh=True)`. If the user gives a specific place or village to pinpoint (e.g. "I am in Assagao", "set my location to Mapusa"), call `get_current_location(set_location="...")`.
 
 [AUTONOMOUS AGENTIC SOFTWARE ENGINEERING]
 When asked to code, build an application, create a project, write scripts, or debug/modify existing repositories:

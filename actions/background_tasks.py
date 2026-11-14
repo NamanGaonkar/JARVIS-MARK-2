@@ -80,6 +80,9 @@ def background_tasks(parameters: dict, player=None) -> str:
         rows = [_row(t) for t in eng.list(10)]
         return "\n".join(rows) if rows else "No background tasks yet."
 
+    tasks = eng.list(50)
+    tid = str(a.get("task_id") or a.get("id") or "").strip()
+
     if action in ("cancel", "stop", "abort", "kill"):
         active_tasks = [t for t in tasks if t["status"] in ACTIVE]
         if not active_tasks and not (tid and eng.get(tid)):
@@ -108,7 +111,6 @@ def background_tasks(parameters: dict, player=None) -> str:
             player.refresh_tasks()
         return outcome.done("background_tasks", deleted=True)
 
-    tid = str(a.get("task_id") or "").strip()
     if tid:
         task = eng.get(tid)
     else:
