@@ -1,7 +1,7 @@
 """Audio listener and identifier for JARVIS.
 
-Captures system audio loopback (Stereo Mix / WASAPI loopback) and uses Gemini
-to identify songs, recognize music, or summarize what is playing in a video or stream.
+Captures system audio loopback (Stereo Mix / WASAPI loopback) or active audio
+and uses Gemini to identify songs, recognize music, or summarize what is playing in a video or stream.
 """
 from __future__ import annotations
 
@@ -47,19 +47,23 @@ def _record_audio(device_idx: int | None, sr: int, ch: int, duration_sec: float)
         sd.wait()
         return data
     except Exception as e:
-        print(f"[AudioListener] Recording error: {e}")
+        print(f"[AudioListener] Recording error on device {device_idx}: {e}")
         return None
 
 
 def _to_wav_bytes(audio_data: np.ndarray, sr: int) -> bytes:
-    """Convert float32 numpy array to 16-bit mono/stereo WAV bytes."""
+    """Convert float32 numpy array to 16-bit mono WAV bytes."""
     # Convert to mono if multi-channel to save bandwidth
     if audio_data.ndim > 1 and audio_data.shape[1] > 1:
         mono = np.mean(audio_data, axis=1)
     else:
         mono = audio_data.flatten()
 
-    # Normalize/clamp to int16
+    # Peak normalization so even quiet songs/videos are crystal clear to Gemini
+    peak = float(np.max(np.abs(mono)))
+    if peak > 0:
+        mono = mono * (0.85 / peak)
+
     clamped = np.clip(mono, -1.0, 1.0)
     int16_data = (clamped * 32767.0).astype(np.int16)
 
@@ -82,36 +86,47 @@ def run(parameters: dict, player=None, session_memory=None) -> str:
         player.write_log("SYS", f"Capturing {seconds}s of system audio loopback...")
 
     dev_idx, sr, ch = _find_loopback_device()
-    if dev_idx is None:
-        return "I could not find an active audio loopback or Stereo Mix device on your system, sir."
+    audio_array = _record_audio(dev_idx, sr, ch, seconds) if dev_idx is not None else None
 
-    audio_array = _record_audio(dev_idx, sr, ch, seconds)
-    if audio_array is None:
-        return "I encountered an error trying to capture your system audio, sir."
+    peak = float(np.max(np.abs(audio_array))) if audio_array is not None else 0.0
 
-    peak = float(np.max(np.abs(audio_array)))
-    if peak < 0.003:
+    # Fallback to microphone if loopback is completely silent (e.g. speakers playing in room)
+    if peak < 0.001:
+        default_mic = sd.default.device[0]
+        if default_mic is not None and default_mic >= 0 and default_mic != dev_idx:
+            try:
+                mic_dev = sd.query_devices(default_mic)
+                mic_sr = int(mic_dev.get("default_samplerate", 48000))
+                mic_audio = _record_audio(default_mic, mic_sr, 1, seconds)
+                if mic_audio is not None and float(np.max(np.abs(mic_audio))) > peak:
+                    audio_array = mic_audio
+                    sr = mic_sr
+                    peak = float(np.max(np.abs(audio_array)))
+            except Exception:
+                pass
+
+    if audio_array is None or peak < 0.0003:
         if player:
-            player.write_log("SYS", "Audio loopback captured silence (peak < 0.003).")
+            player.write_log("SYS", "Audio loopback captured silence.")
         return "It sounds quiet right now, sir. I didn't detect any music or audio playing through your speakers."
 
     wav_bytes = _to_wav_bytes(audio_array, sr)
 
     prompt = (
         "You are JARVIS's desktop audio perception engine. "
-        "The following audio was recorded directly from the user's computer speakers or headphones.\n"
+        "The following audio was recorded directly from the user's computer speakers or room.\n"
         f"User question: {query}\n"
         "Instructions: "
-        "- If it is a music track or song, identify the song title, artist, and genre.\n"
-        "- If it is someone speaking, a podcast, or a video, summarize what is being said.\n"
-        "- Keep your answer concise (1-2 sentences), natural, and direct for spoken reply."
+        "- If it is a music track or song (even instrumental or covered), identify the song title, artist, and genre.\n"
+        "- If it is speech, a video, or podcast, summarize what is being said.\n"
+        "- Keep your answer concise (1-2 sentences), direct, and natural for a spoken reply."
     )
 
     try:
         part = types.Part.from_bytes(data=wav_bytes, mime_type="audio/wav")
         answer = gemini.text([part, prompt], tier=gemini.FAST)
         if not answer:
-            return "I captured the audio, sir, but was unable to identify the track or speech."
+            return "I captured the audio stream, sir, but was unable to identify the track or speech."
 
         cleaned = answer.strip()
         if player:
@@ -143,4 +158,3 @@ TOOL = {
     },
     "handler": run,
 }
-

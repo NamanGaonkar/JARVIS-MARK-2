@@ -1,10 +1,12 @@
 #youtube_video.py
 import json
+import os
 import re
 import sys
 import time
 import subprocess
 import shutil
+import webbrowser
 from pathlib import Path
 from datetime import datetime
 from urllib.parse import quote_plus
@@ -69,12 +71,18 @@ def _open_url(url: str) -> None:
             if os.path.exists(comet_exe):
                 subprocess.Popen([comet_exe, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return
+            try:
+                os.startfile(url)
+                return
+            except Exception:
+                webbrowser.open_new_tab(url)
+                return
         if is_mac():
             subprocess.Popen(["open", url])
         elif is_linux():
             subprocess.Popen(["xdg-open", url])
         else:
-            subprocess.Popen(["cmd", "/c", "start", "", url], shell=False)
+            webbrowser.open_new_tab(url)
     except Exception as e:
         print(f"[YouTube] ⚠️ open_url failed: {e}")
 

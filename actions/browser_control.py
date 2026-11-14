@@ -1235,17 +1235,25 @@ def browser_control(
         if action == "search":
             base    = _SEARCH_ENGINES.get(params.get("engine", "google").lower(),
                                           _SEARCH_ENGINES["google"])
-            nav_url = base + params.get("query", "").replace(" ", "+")
+            query_str = params.get("query", "").strip()
+            import urllib.parse
+            nav_url = base + urllib.parse.quote_plus(query_str)
         else:
             nav_url = params.get("url", "").strip()
+            if not nav_url:
+                nav_url = "https://www.google.com"
 
         result = _open_native(nav_url, browser)
-        # Remembered unless it outright FAILED. `unverified` is now the normal
-        # answer for a native open - the browser does not report back - and
-        # treating that as a problem would stop the automation session ever
-        # resuming the page the user is actually looking at.
         if nav_url and not result.startswith(f"status={outcome.FAILED} "):
             _registry.note_native_url(_normalize_url(nav_url))
+            if action == "search":
+                msg = f"Opened search for '{params.get('query')}' in your browser, sir."
+            elif action == "new_tab":
+                msg = f"Opened a new tab for {nav_url}, sir."
+            else:
+                msg = f"Navigated to {nav_url}, sir."
+            _log(player, f"BROWSER: {msg}")
+            return msg
         _log(player, result)
         return result
 

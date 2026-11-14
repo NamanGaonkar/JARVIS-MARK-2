@@ -141,7 +141,7 @@ def save_assistant_config(assistant_name: str, user_name: str) -> None:
     _write_config(data)
 
 
-APP_VERSION = "2.2.1"
+APP_VERSION = "2.3.0"
 
 
 @_locked
@@ -157,12 +157,21 @@ def check_and_update_version_upgrade() -> str | None:
         _write_config(data)
         return (
             f"[SYSTEM UPDATE NOTICE - VERSION {APP_VERSION}]\n"
-            f"JARVIS has just been upgraded to Mark II Version {APP_VERSION}. "
-            f"Key upgrades applied: Ultra-smooth, zero-lag continuous CAM mode with instant opening/closing, "
-            f"persistent camera streaming without auto-close interruptions, and "
-            f"100% accurate live real-time battery status, power state, and hardware metrics. "
-            f"In your very first turn or response this session, acknowledge this upgrade warmly and smoothly "
-            f"to the user (e.g. 'Systems upgraded and online, sir. Running Mark II Version {APP_VERSION}. How may I serve you today?')."
+            f"JARVIS has just undergone a major Mark II upgrade to Version {APP_VERSION}. "
+            f"Upgrades and new capabilities now fully active on your workstation:\n"
+            f"1. WHIS BEATS & Universal Music Player: You can now ask to play any song or music video directly "
+            f"(e.g. 'Play Cutiepie', 'Play Believer by Imagine Dragons') and JARVIS will search and play it immediately, "
+            f"with full media controls for play/pause, next track, previous track, volume up/down, and mute.\n"
+            f"2. Steam Voice Game Launcher: Auto-detects installed games and launches them (e.g. Marvel Rivals).\n"
+            f"3. Discord Rich Presence: Live status on Discord via native Windows IPC.\n"
+            f"4. Active Windows & Workspace Awareness: JARVIS passively knows your focused app and tab without camera.\n"
+            f"5. Conversational Follow-Up Window: Automatic 10-second follow-up window after questions — no need to re-say 'Hey Jarvis'!\n"
+            f"6. Desktop Audio Loopback & Song/Video Identifier: Listen to speakers/videos and identify playing songs or summarize speech.\n"
+            f"7. Dedicated Close Application Tool (close_app): Cleanly close or quit any program or active window by name.\n"
+            f"8. Window Manager & Layouts (manage_window_layout): Snap windows left/right, tile apps side-by-side (e.g. Chrome on left, VS Code on right).\n"
+            f"9. Browser Tab & Search Navigation: Instant search and new tab launch in the browser.\n"
+            f"In your very first turn or response this session, acknowledge this Version {APP_VERSION} upgrade warmly to Naman "
+            f"and let him know you are fully armed with these new capabilities."
         )
     return None
 
