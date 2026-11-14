@@ -182,7 +182,7 @@ _TAIL_MARGIN = 0.25
 # seconds is twenty-five times the measured first response, which leaves room
 # for a slow tool call (those send their own traffic, which clears the deadline)
 # while turning an unbounded hang into a blip.
-_STALL_LIMIT = 30.0
+_STALL_LIMIT = 45.0
 
 _VIS_WIN = 1024        # ~43 ms analysis window at 24 kHz: enough for formants
 _VIS_HOP = 480         # 20 ms between frames, i.e. 50 shapes a second
@@ -2105,7 +2105,6 @@ class JarvisLive:
                         self._user_spoke_time = time.monotonic()
                     elif getattr(self, "_user_was_speaking", False) and (time.monotonic() - getattr(self, "_user_spoke_time", 0.0) > 0.6):
                         self._user_was_speaking = False
-                        loop.call_soon_threadsafe(self._arm_stall)
                 except Exception:
                     pass
 
@@ -2331,6 +2330,7 @@ class JarvisLive:
                                 self._arm_stall()          # arm stall watchdog for the incoming answer
 
                         if sc.turn_complete:
+                            self._clear_stall()
                             if self._turn_done_event:
                                 self._turn_done_event.set()
 
@@ -2890,6 +2890,27 @@ class JarvisLive:
                 print(f"[Dashboard] Command error: {e}")
                 await asyncio.sleep(0.5)
 
+    def _on_dashboard_action(self, action: str):
+        print(f"[Dashboard Action] Received: {action}")
+        if action == "interrupt":
+            self.interrupt()
+        elif action == "cam_toggle":
+            new_mode = "off" if getattr(self, "_active_vision_mode", "off") == "camera" else "camera"
+            if self._loop:
+                self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self._apply_vision_mode(new_mode)))
+        elif action == "screen_toggle":
+            new_mode = "off" if getattr(self, "_active_vision_mode", "off") == "screen" else "screen"
+            if self._loop:
+                self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self._apply_vision_mode(new_mode)))
+        elif action == "mic_toggle":
+            self.ui.muted = not getattr(self.ui, "muted", False)
+            if self._dashboard:
+                asyncio.create_task(self._dashboard.broadcast({
+                    "type": "mic_state", "muted": self.ui.muted
+                }))
+        elif action == "wake":
+            self._on_wake_manual()
+
     # ── main loop ───────────────────────────────────────────────────────────
 
     # ── Which engine holds the conversation ──────────────────────────────────
@@ -3044,6 +3065,9 @@ class JarvisLive:
             from dashboard.server import DashboardServer
             self._dashboard = DashboardServer()
             self._dashboard.set_connect_callback(self._on_phone_connected)
+            self._dashboard.set_action_callback(self._on_dashboard_action)
+            if hasattr(self.ui, "set_dashboard"):
+                self.ui.set_dashboard(self._dashboard)
             self._keep_task(asyncio.create_task(self._dashboard.serve()))
             # Runs for the whole lifetime, not just inside an active session
             self._keep_task(asyncio.create_task(self._process_dashboard_commands()))

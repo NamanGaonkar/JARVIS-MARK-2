@@ -730,6 +730,7 @@ class DashboardServer:
         self._command_queue               = asyncio.Queue()
         self._wake_callback               = None
         self._connect_callback            = None
+        self._action_callback             = None
         self._pending_keys: dict[str, float] = {}
         self._throttle                    = _Throttle()
         self._device_sessions: dict[str, dict] = {}  # device_token → {session_key}
@@ -828,6 +829,9 @@ class DashboardServer:
     def set_connect_callback(self, fn) -> None:
         self._connect_callback = fn
 
+    def set_action_callback(self, fn) -> None:
+        self._action_callback = fn
+
     # ── broadcast ────────────────────────────────────────────────────────
 
     async def broadcast(self, msg: dict) -> None:
@@ -868,6 +872,18 @@ class DashboardServer:
         def _who(req: Request) -> str:
             """The client address a throttle counts against."""
             return (getattr(getattr(req, "client", None), "host", "") or "unknown")
+
+        @app.get("/api/health")
+        async def api_health():
+            return {"status": "ok", "app": "JARVIS Mark II", "version": "2.3.0"}
+
+        @app.get("/api/system-status")
+        async def api_system_status():
+            try:
+                from actions.system_monitor import get_system_status
+                return get_system_status()
+            except Exception as e:
+                return {"error": str(e)}
 
         @app.get("/login", response_class=HTMLResponse)
         async def login_page():
@@ -1158,7 +1174,9 @@ class DashboardServer:
         @app.websocket("/ws")
         async def ws_ep(websocket: WebSocket, token: str = ""):
             tok = token.strip()
-            if not _valid(tok):
+            client_ip = getattr(getattr(websocket, "client", None), "host", "")
+            is_local = client_ip in ("127.0.0.1", "::1", "localhost")
+            if not is_local and not _valid(tok):
                 await websocket.close(code=4001)
                 return
             await websocket.accept()
@@ -1171,13 +1189,18 @@ class DashboardServer:
             try:
                 while True:
                     data = await websocket.receive_json()
-                    if data.get("type") == "command":
+                    mtype = data.get("type")
+                    if mtype == "command":
                         enc = data.get("enc", "")
                         t   = self._decrypt(tok, enc) if enc else (data.get("text") or "").strip()
                         if t:
                             await self._command_queue.put(t)
                             if self._wake_callback:
                                 self._wake_callback()
+                    elif mtype == "action":
+                        act = data.get("action", "")
+                        if self._action_callback:
+                            self._action_callback(act)
             except WebSocketDisconnect:
                 pass
             finally:
@@ -1188,27 +1211,57 @@ class DashboardServer:
     # ── serve ─────────────────────────────────────────────────────────────
 
     async def _serve_redirector(self) -> None:
-        """A plain-HTTP listener whose only job is to send people to HTTPS.
-
-        THE PROBLEM THIS SOLVES, WHICH LOOKED LIKE THE SERVER BEING DOWN
-            Type `192.168.1.108:8000` into a phone browser and it tries HTTP.
-            The TLS server accepts the connection, finds no handshake and
-            closes it — which Chrome reports as "This site can't be reached,
-            192.168.1.108 refused to connect". The server is running perfectly
-            and the user is told it is off.
-
-            The port that used to sit here was a SECOND HTTPS server, added on
-            the belief that browsers upgrade a bare `ip:port` to https. Some
-            do. Android Chrome does not, so the second port had exactly the
-            same failure as the first.
-
-        So this speaks HTTP, and answers everything with a redirect to the same
-        path on the HTTPS port. Typing the address by hand now works, which is
-        what people do when a QR code is inconvenient.
-        """
+        """A plain-HTTP listener whose only job is to send people to HTTPS."""
         from fastapi.responses import RedirectResponse
 
         bounce = FastAPI(docs_url=None, redoc_url=None)
+
+        @bounce.get("/api/health")
+        async def _bounce_health():
+            return {"status": "ok", "app": "JARVIS Mark II", "version": "2.3.0"}
+
+        @bounce.get("/api/system-status")
+        async def _bounce_system_status():
+            try:
+                from actions.system_monitor import get_system_status
+                return get_system_status()
+            except Exception as e:
+                return {"error": str(e)}
+
+        @bounce.websocket("/ws")
+        async def _bounce_ws(websocket: WebSocket, token: str = ""):
+            tok = token.strip()
+            client_ip = getattr(getattr(websocket, "client", None), "host", "")
+            is_local = client_ip in ("127.0.0.1", "::1", "localhost")
+            if not is_local and not self._tokens.get(tok):
+                await websocket.close(code=4001)
+                return
+            await websocket.accept()
+            self._clients.add(websocket)
+            for entry in self._history[-50:]:
+                try:
+                    await websocket.send_json(entry)
+                except Exception:
+                    break
+            try:
+                while True:
+                    data = await websocket.receive_json()
+                    mtype = data.get("type")
+                    if mtype == "command":
+                        enc = data.get("enc", "")
+                        t   = self._decrypt(tok, enc) if enc else (data.get("text") or "").strip()
+                        if t:
+                            await self._command_queue.put(t)
+                            if self._wake_callback:
+                                self._wake_callback()
+                    elif mtype == "action":
+                        act = data.get("action", "")
+                        if self._action_callback:
+                            self._action_callback(act)
+            except WebSocketDisconnect:
+                pass
+            finally:
+                self._clients.discard(websocket)
 
         @bounce.get("/{path:path}")
         async def _to_https(path: str, request: Request):
@@ -1222,6 +1275,34 @@ class DashboardServer:
         print(f"[Dashboard] Type by hand:  {self._ip}:{PORT}  "
               f"(sends you to the secure page)")
         await uvicorn.Server(cfg).serve()
+
+    async def _serve_port_80_redirector(self) -> None:
+        """Plain HTTP listener on default port 80.
+        Redirects http://192.168.1.9/ to https://192.168.1.9:8001 (or http://192.168.1.9:8000)
+        so typing the bare IP in any phone or desktop browser works instantly."""
+        from fastapi.responses import RedirectResponse
+        bounce80 = FastAPI(docs_url=None, redoc_url=None)
+
+        @bounce80.get("/api/health")
+        async def _b80_health():
+            return {"status": "ok", "app": "JARVIS Mark II", "version": "2.3.0"}
+
+        @bounce80.get("/{path:path}")
+        async def _to_dashboard(path: str, request: Request):
+            query = f"?{request.url.query}" if request.url.query else ""
+            target_port = SECURE_PORT if self._ssl_enabled() else PORT
+            proto = "https" if self._ssl_enabled() else "http"
+            return RedirectResponse(
+                f"{proto}://{self._ip}:{target_port}/{path}{query}",
+                status_code=307)
+
+        try:
+            cfg = uvicorn.Config(bounce80, host="0.0.0.0", port=80,
+                                 log_level="warning", log_config=None)
+            print(f"[Dashboard] Listening on port 80 (http://{self._ip}) -> redirects to dashboard")
+            await uvicorn.Server(cfg).serve()
+        except Exception as e:
+            print(f"[Dashboard] Port 80 redirector not started (fallback to :{PORT}): {e}")
 
     async def serve(self) -> None:
         if not _DEPS_OK:
@@ -1263,6 +1344,7 @@ class DashboardServer:
         # loud, repeated warning when it cannot. The page keeps working either
         # way; without a secure context it simply cannot encrypt, and it says
         # so on screen rather than pretending.
+        asyncio.create_task(self._serve_port_80_redirector())
         if use_ssl:
             asyncio.create_task(self._serve_redirector())
         else:
