@@ -918,6 +918,8 @@ class JarvisLive:
             if speaking:
                 continue
             if (time.monotonic() - self._last_user_speech) > self._wake_sleep_timeout:
+                if time.monotonic() < getattr(self, "_follow_up_deadline", 0.0):
+                    continue
                 self.sleep(reason="no speech for 2 minutes")
 
     # ── Wake word: UI callbacks (called from the Qt thread) ──────────────────
@@ -1646,6 +1648,13 @@ class JarvisLive:
                 parts.append(upgrade_ctx)
         except Exception as e:
             print(f"[JARVIS] Upgrade check: {e}")
+        try:
+            from core.window_observer import WindowObserver
+            win_summary = WindowObserver.get_instance().get_context_summary()
+            if win_summary:
+                parts.append(f"CURRENT USER WORKSPACE CONTEXT: {win_summary}")
+        except Exception:
+            pass
         parts.append(sys_prompt)
 
         cfg = dict(
@@ -2050,10 +2059,14 @@ class JarvisLive:
             # only a queue push, so the audio path is never slowed. When wake word
             # is off (default) or we're awake, this is a single boolean check.
             if self._wake_enabled and not self._awake:
-                det = self._wake_detector
-                if det is not None:
-                    det.feed(indata)
-                return
+                # Follow-up window: if JARVIS recently asked a question, listen directly without requiring wake-word
+                if time.monotonic() < getattr(self, "_follow_up_deadline", 0.0):
+                    pass
+                else:
+                    det = self._wake_detector
+                    if det is not None:
+                        det.feed(indata)
+                    return
 
             with self._speaking_lock:
                 jarvis_speaking = self._is_speaking
@@ -2328,6 +2341,8 @@ class JarvisLive:
                                 self._last_user_speech = time.monotonic()
                                 self._interrupted = False  # fresh user speech automatically clears any stale interrupt
                                 self._arm_stall()          # arm stall watchdog for the incoming answer
+                                if getattr(self, "_follow_up_deadline", 0.0) > time.monotonic():
+                                    self._awake = True
 
                         if sc.turn_complete:
                             self._clear_stall()
@@ -2373,6 +2388,23 @@ class JarvisLive:
                                         "text": full_out,
                                         "ts": datetime.now().isoformat(),
                                     }))
+
+                                # Conversational Follow-Up Window:
+                                # When JARVIS asks a question or follow-up, keep the listening window armed
+                                # for 10 seconds so the user doesn't need to re-say "Hey Jarvis".
+                                trimmed_out = full_out.strip()
+                                is_follow_up = trimmed_out.endswith("?") or any(
+                                    kw in trimmed_out.lower() for kw in (
+                                        "would you like", "should i", "do you want",
+                                        "shall i", "let me know", "what would you",
+                                        "which one", "can i help", "anything else"
+                                    )
+                                )
+                                if is_follow_up:
+                                    self._follow_up_deadline = time.monotonic() + 10.0
+                                    if self._wake_enabled:
+                                        self._awake = True
+                                        self.ui.set_state("LISTENING")
                             out_buf = []
 
                             if self._vision_close_pending:
@@ -3074,6 +3106,22 @@ class JarvisLive:
         except Exception as e:
             print(f"[Dashboard] Disabled: {e}")
             self._dashboard = None
+
+        # Start Discord Rich Presence (RPC)
+        try:
+            from core.discord_rpc import DiscordRPC
+            DiscordRPC.get_instance().start()
+            print("[JARVIS] Discord RPC bridge initialized")
+        except Exception as e:
+            print(f"[DiscordRPC] Initialization error: {e}")
+
+        # Start Active Window & Foreground App Observer
+        try:
+            from core.window_observer import WindowObserver
+            WindowObserver.get_instance().start()
+            print("[JARVIS] Windows Active App Observer running")
+        except Exception as e:
+            print(f"[WindowObserver] Initialization error: {e}")
 
         while True:
             try:

@@ -254,6 +254,11 @@ class JarvisUI:
 
     def set_state(self, state: str):
         self._win._state_sig.emit(state)
+        try:
+            from core.discord_rpc import DiscordRPC
+            DiscordRPC.get_instance().set_state(state)
+        except Exception:
+            pass
 
     def write_log(self, text: str):
         self._win._log_sig.emit(text)
