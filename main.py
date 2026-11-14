@@ -2031,18 +2031,18 @@ class JarvisLive:
 
     async def _send_realtime(self):
         while True:
-            msg = await self.out_queue.get()
-            # Gemini 3.x Live rejects the old realtime_input.media_chunks field
-            # (what `media=...` maps to) and closes the socket with a 1007. Send
-            # mic / phone PCM through the new `audio` field instead. Queue items
-            # are {"data": <bytes>, "mime_type": <str>} from _listen_audio and
-            # the phone relay.
-            await self.session.send_realtime_input(
-                audio=types.Blob(
-                    data=msg["data"],
-                    mime_type=msg.get("mime_type", "audio/pcm;rate=16000"),
-                )
-            )
+            try:
+                msg = await self.out_queue.get()
+                if self.session:
+                    await self.session.send_realtime_input(
+                        audio=types.Blob(
+                            data=msg["data"],
+                            mime_type=msg.get("mime_type", "audio/pcm;rate=16000"),
+                        )
+                    )
+            except Exception as e:
+                print(f"[JARVIS] Realtime send: {e}")
+                await asyncio.sleep(0.05)
 
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")
@@ -2051,15 +2051,7 @@ class JarvisLive:
         self._user_spoke_time = 0.0
 
         def callback(indata, frames, time_info, status):
-            # ── Wake-word gate ───────────────────────────────────────────────
-            # While asleep, the mic audio NEVER goes to Gemini (nothing is
-            # streamed, so JARVIS can't respond to speech not addressed to it and
-            # nothing leaves the machine). Frames are instead handed to the local
-            # detector, which runs its model in ITS OWN thread — the cost here is
-            # only a queue push, so the audio path is never slowed. When wake word
-            # is off (default) or we're awake, this is a single boolean check.
             if self._wake_enabled and not self._awake:
-                # Follow-up window: if JARVIS recently asked a question, listen directly without requiring wake-word
                 if time.monotonic() < getattr(self, "_follow_up_deadline", 0.0):
                     pass
                 else:
@@ -2071,42 +2063,24 @@ class JarvisLive:
             with self._speaking_lock:
                 jarvis_speaking = self._is_speaking
 
-            # While JARVIS is speaking, microphone input is held closed:
-            # Prevents speaker echo, mid-sentence audio cutoffs, hallucinations,
-            # and stall loops. Speech stays completely smooth and rock-solid.
             if jarvis_speaking:
                 return
 
-            # ── Echo tail ────────────────────────────────────────────────────
-            # The speaking flag has dropped but the speakers have not finished.
-            # Sending this to the model is how an assistant hears itself, decides
-            # it was addressed, and answers its own last sentence. The microphone
-            # stays OPEN — the guard only drops blocks that are our own voice, so
-            # replying the instant it stops still works.
-            if self._tail_active():
-                try:
-                    if not self._echo.is_user_speech(
-                            indata, SEND_SAMPLE_RATE, _pcm_level(indata)):
-                        return
-                    self._tail_until = 0.0      # a real voice ends the tail early
-                except Exception:
-                    pass
-            elif self._echo._hist:
-                self._echo.reset()
-
-            # ── Push-to-talk ─────────────────────────────────────────────────
-            # When it is on the microphone is closed by default and the chord
-            # opens it, which is the whole point: nothing leaves the machine
-            # unless you are holding the key.
             if self._ptt_enabled and not self._ptt_held:
                 return
             
             if not self.ui.muted and not self._phone_active:
                 data = indata.tobytes()
-                loop.call_soon_threadsafe(
-                    self.out_queue.put_nowait,
-                    {"data": data, "mime_type": "audio/pcm;rate=16000"}
-                )
+                def _enqueue():
+                    try:
+                        self.out_queue.put_nowait({"data": data, "mime_type": "audio/pcm;rate=16000"})
+                    except asyncio.QueueFull:
+                        try:
+                            self.out_queue.get_nowait()
+                            self.out_queue.put_nowait({"data": data, "mime_type": "audio/pcm;rate=16000"})
+                        except Exception:
+                            pass
+                loop.call_soon_threadsafe(_enqueue)
                 # Feed the live mic level to the HUD so the waveform reacts to
                 # the user's actual voice while listening. Purely cosmetic — any
                 # failure here must never disturb the mic.
