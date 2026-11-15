@@ -1126,9 +1126,7 @@ class JarvisLive:
             alerts = await asyncio.to_thread(monitor_check_all)
             if not alerts:
                 return
-            memory = load_memory()
-            lang_e = memory.get("identity", {}).get("language", {})
-            lang   = (lang_e.get("value", "") if isinstance(lang_e, dict) else str(lang_e)).strip() or "English"
+            lang = getattr(self, "_session_language", "British English")
             for alert in alerts:
                 if not self.session:
                     return
@@ -1627,7 +1625,16 @@ class JarvisLive:
             ),
         })
 
-        parts = [time_ctx, identity_ctx]
+        lang_directive = (
+            "[LANGUAGE PROTOCOL]\n"
+            "Your default operating language is strictly British English (UK English).\n"
+            "Deliver all startup greetings, diagnostic updates, and default responses in British English.\n"
+            "If the user explicitly instructs you in the conversation to switch to another language (e.g. 'speak in Konkani', 'speak Marathi', 'switch to Hindi', 'talk in French'), switch for that conversation.\n"
+            "When the app restarts, you always reset back to British English.\n"
+            "Your workstation location (Goa, India) never causes you to default to Konkani or Marathi.\n\n"
+        )
+
+        parts = [time_ctx, identity_ctx, lang_directive]
         if loc_ctx:
             parts.append(loc_ctx)
         if hw_ctx:
@@ -2565,7 +2572,7 @@ class JarvisLive:
             e = identity.get(k, {})
             return (e.get("value", "") if isinstance(e, dict) else str(e)).strip()
 
-        lang = _val("language")
+        self._session_language = "British English"
         name = _val("name")
         now = datetime.now()
         time_str = now.strftime("%H:%M")
@@ -2598,9 +2605,11 @@ class JarvisLive:
             return
 
         # ── Phase 1: Sentient Diagnostic Greeting ────────────────────────────
-        lang_clause = (f" Speak this greeting in {lang}, then follow the "
-                       f"user's own language from their first reply onward."
-                       if lang else "")
+        lang_clause = (
+            " Speak this greeting strictly in polished, refined British English (UK English). "
+            "Do NOT greet in Konkani, Marathi, or any regional language. "
+            "Default to British English unless the user explicitly asks to switch language later."
+        )
         name_clause = f" Address the user as {name}." if name else ""
 
         # Inject last session context with intelligent time-of-day awareness
@@ -2717,10 +2726,7 @@ class JarvisLive:
             return
         self._session_log = []    # reset immediately so the next session starts clean
 
-        memory = load_memory()
-        lang_entry = memory.get("identity", {}).get("language", {})
-        lang = (lang_entry.get("value", "") if isinstance(lang_entry, dict) else str(lang_entry)).strip()
-        lang = lang or "English"
+        lang = getattr(self, "_session_language", "British English")
 
         convo = "\n".join(log[-40:])   # cap at last 40 turns to stay within token budget
         prompt = (
@@ -2781,9 +2787,7 @@ class JarvisLive:
                 if not speaking and not recent_speech:
                     try:
                         alerts = await asyncio.to_thread(monitor_check_all)
-                        memory = load_memory()
-                        lang_e = memory.get("identity", {}).get("language", {})
-                        lang   = (lang_e.get("value", "") if isinstance(lang_e, dict) else str(lang_e)).strip() or "English"
+                        lang = getattr(self, "_session_language", "British English")
                         for alert in alerts:
                             msg = (
                                 f"{alert}\n\n"
