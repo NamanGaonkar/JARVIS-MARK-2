@@ -875,7 +875,7 @@ class DashboardServer:
 
         @app.get("/api/health")
         async def api_health():
-            return {"status": "ok", "app": "JARVIS Mark II", "version": "2.3.0"}
+            return {"status": "ok", "app": "JARVIS Mark II", "version": "2.3.2"}
 
         @app.get("/api/system-status")
         async def api_system_status():
@@ -1218,7 +1218,7 @@ class DashboardServer:
 
         @bounce.get("/api/health")
         async def _bounce_health():
-            return {"status": "ok", "app": "JARVIS Mark II", "version": "2.3.0"}
+            return {"status": "ok", "app": "JARVIS Mark II", "version": "2.3.2"}
 
         @bounce.get("/api/system-status")
         async def _bounce_system_status():
@@ -1285,7 +1285,7 @@ class DashboardServer:
 
         @bounce80.get("/api/health")
         async def _b80_health():
-            return {"status": "ok", "app": "JARVIS Mark II", "version": "2.3.0"}
+            return {"status": "ok", "app": "JARVIS Mark II", "version": "2.3.2"}
 
         @bounce80.get("/{path:path}")
         async def _to_dashboard(path: str, request: Request):

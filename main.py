@@ -2070,7 +2070,7 @@ class JarvisLive:
             with self._speaking_lock:
                 jarvis_speaking = self._is_speaking
 
-            if jarvis_speaking:
+            if jarvis_speaking or self._tail_active():
                 return
 
             if self._ptt_enabled and not self._ptt_held:
@@ -2465,25 +2465,52 @@ class JarvisLive:
             pass
 
         try:
+            last_audio_time = 0.0
+            prebuffered = False
+
             while True:
+                turn_done = bool(self._turn_done_event and self._turn_done_event.is_set())
+                # If actively speaking and waiting for server to finish turn, allow up to 0.4s to absorb network jitter
+                timeout = 0.1 if (turn_done or not self._is_speaking) else 0.4
+
                 try:
                     chunk = await asyncio.wait_for(
                         self.audio_in_queue.get(),
-                        timeout=0.1
+                        timeout=timeout
                     )
                 except asyncio.TimeoutError:
                     if self.audio_in_queue.empty():
-                        self.set_speaking(False)
-                        if self._turn_done_event and self._turn_done_event.is_set():
-                            self._turn_done_event.clear()
+                        now = time.monotonic()
+                        turn_done = bool(self._turn_done_event and self._turn_done_event.is_set())
+                        # Drop speaking state only when:
+                        # 1) Server confirmed turn_complete, OR
+                        # 2) Audio queue has been dry for >0.5s (prevents hanging on dropped connections)
+                        if turn_done or (self._is_speaking and (now - last_audio_time > 0.5)):
+                            if self._is_speaking:
+                                self.set_speaking(False)
+                                prebuffered = False
+                            if turn_done and self._turn_done_event:
+                                self._turn_done_event.clear()
                     continue
 
-                self.set_speaking(True)
+                last_audio_time = time.monotonic()
+                if not self._is_speaking:
+                    self.set_speaking(True)
 
                 # Batch all immediately-available chunks into one write to reduce
-                # thread-pool round-trips (was one asyncio.to_thread per 50ms slice).
-                # Cap at ~200 ms so interrupt() still stops audio within ~200 ms.
+                # thread-pool round-trips. Cap at ~200 ms so interrupt() still stops audio within ~200 ms.
                 batch = bytearray(chunk)
+
+                # Smooth start: if starting a fresh phrase, pre-buffer a small cushion (~100ms / 4800 bytes)
+                # to prevent Windows audio driver buffer starvation / clicks from packet arrival variations.
+                if not prebuffered and len(batch) < 4800:
+                    try:
+                        next_chunk = await asyncio.wait_for(self.audio_in_queue.get(), timeout=0.04)
+                        batch.extend(next_chunk)
+                    except (asyncio.TimeoutError, asyncio.QueueEmpty):
+                        pass
+                    prebuffered = True
+
                 while len(batch) < 9600:   # 9600 bytes ≈ 200 ms at 24 kHz / 16-bit mono
                     try:
                         batch.extend(self.audio_in_queue.get_nowait())
